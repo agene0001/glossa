@@ -149,6 +149,7 @@ pub struct QueuedItem {
     pub lemma: String,
     pub pos: PartOfSpeech,
     pub frequency_rank: u32,
+    pub gloss: Option<String>,
     pub reason: String,
 }
 
@@ -202,6 +203,7 @@ pub fn overview(
             lemma: l.lemma.clone(),
             pos: l.pos,
             frequency_rank: l.frequency_rank,
+            gloss: l.gloss.clone(),
             reason: format!(
                 "Frequency rank #{} — one of the most common words you haven't met yet.",
                 l.frequency_rank
@@ -250,6 +252,7 @@ mod tests {
             lemma: lemma.into(),
             pos: PartOfSpeech::Noun,
             frequency_rank: rank,
+            gloss: None,
         }
     }
 

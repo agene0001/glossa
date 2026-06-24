@@ -13,17 +13,20 @@ use glossa_storage::{StorageError, Store};
 struct SeedWord {
     lemma: String,
     pos: PartOfSpeech,
+    gloss: String,
 }
 
 /// The bundled frequency list, embedded at compile time.
 const ES_FREQUENCY: &str = include_str!("../seed/es_frequency.json");
 
-/// Seed lexemes + grammar patterns if the inventory is empty for `language`.
-pub async fn seed_if_empty(store: &dyn Store, language: &LanguageCode) -> Result<(), StorageError> {
-    if store.lexeme_count(language).await? > 0 {
-        return Ok(());
-    }
-
+/// Sync the reference inventory from the bundled seed on every launch.
+///
+/// Idempotent: lexeme ids are assigned by list order, so re-running just
+/// updates lemma/pos/**gloss** for existing ids and adds any new words —
+/// learner state keys on `lexeme_id` and is untouched. This means editing
+/// `es_frequency.json` (e.g. adding meanings) reaches existing installs on the
+/// next launch, instead of only seeding once on a fresh database.
+pub async fn sync_inventory(store: &dyn Store, language: &LanguageCode) -> Result<(), StorageError> {
     let words: Vec<SeedWord> =
         serde_json::from_str(ES_FREQUENCY).expect("bundled es_frequency.json must be valid JSON");
 
@@ -36,6 +39,7 @@ pub async fn seed_if_empty(store: &dyn Store, language: &LanguageCode) -> Result
             lemma: w.lemma,
             pos: w.pos,
             frequency_rank: i as u32 + 1,
+            gloss: Some(w.gloss),
         })
         .collect();
 

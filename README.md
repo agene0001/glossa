@@ -17,9 +17,13 @@ with the **Anthropic API** for generation.
 
 ## What works in V1
 
+- **Onboarding** — first launch asks whether you're a beginner or already know
+  some words; the placement step lets you tick known words so content starts at
+  the right level.
 - **Reading view** — generates comprehensible-input content, highlights every
-  word by your mastery (known / learning / new / unknown), and shows the new
-  words introduced. Tap any word to mark it known.
+  word by your mastery (known / learning / new / unknown), shows a glossary of
+  the new words **with meanings**, and lets you reveal a full translation. Tap
+  any word to see what it means (and mark it known from there).
 - **Knowledge graph** — frequency-weighted next-word selection, mastery
   transitions with recency decay, all driven by an append-only event log.
 - **Review view** — known/learning/unseen counts, grammar-pattern progress, and

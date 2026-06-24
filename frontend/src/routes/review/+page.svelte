@@ -74,6 +74,7 @@
 				{#each ov.next_queue as item (item.lexeme_id)}
 					<li>
 						<span class="lemma">{item.lemma}</span>
+						{#if item.gloss}<span class="gloss">{item.gloss}</span>{/if}
 						<span class="pos">{item.pos}</span>
 						<span class="reason">{item.reason}</span>
 						<button onclick={() => know(item)} disabled={busy}>I know this</button>

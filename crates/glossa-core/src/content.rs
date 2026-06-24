@@ -46,6 +46,9 @@ pub struct GeneratedContent {
     pub known_words_used: Vec<String>,
     pub new_words_introduced: Vec<String>,
     pub grammar_targeted: Option<String>,
+    /// A natural translation of `text` into the learner's native language, so
+    /// the learner can check their understanding (revealed on demand in the UI).
+    pub translation: Option<String>,
 }
 
 /// How a single token relates to the learner's knowledge — drives highlighting.
@@ -69,6 +72,8 @@ pub struct Token {
     pub is_word: bool,
     pub status: Option<TokenStatus>,
     pub lexeme_id: Option<LexemeId>,
+    /// Meaning of this word (if known to the inventory), for tap-to-reveal.
+    pub gloss: Option<String>,
 }
 
 /// A new word surfaced to the learner alongside the text (the "5%").
@@ -77,6 +82,7 @@ pub struct WordInfo {
     pub lemma: String,
     pub lexeme_id: Option<LexemeId>,
     pub pos: Option<PartOfSpeech>,
+    pub gloss: Option<String>,
 }
 
 /// The enriched, frontend-facing result of generating a piece of content.
@@ -90,6 +96,8 @@ pub struct ContentResponse {
     pub tokens: Vec<Token>,
     /// The new words introduced in this piece (for an inline glossary).
     pub new_words: Vec<WordInfo>,
+    /// A native-language translation of the whole piece (revealed on demand).
+    pub translation: Option<String>,
     pub grammar_targeted: Option<String>,
     /// Actual measured ratio of known tokens (sanity-check against the target).
     pub known_ratio: f32,

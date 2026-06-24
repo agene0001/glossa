@@ -17,6 +17,10 @@ pub struct Lexeme {
     pub lemma: String,
     pub pos: PartOfSpeech,
     pub frequency_rank: u32,
+    /// Short meaning in the learner's native language (e.g. "to eat"). Without
+    /// this, content isn't comprehensible — you can't learn a word you can't
+    /// understand. `None` if the seed list didn't provide one.
+    pub gloss: Option<String>,
 }
 
 /// A grammar pattern tracked as a first-class node, exactly like vocabulary

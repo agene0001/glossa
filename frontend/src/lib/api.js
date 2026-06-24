@@ -15,8 +15,8 @@ export const api = {
 	recordStoryRead: (storyId, understood) =>
 		invoke('record_story_read', { storyId, understood }),
 
-	/** Counts + the priority queue for the Review view. */
-	graphOverview: () => invoke('graph_overview'),
+	/** Counts + the priority queue. `queueLimit` sizes the queue (placement uses more). */
+	graphOverview: (queueLimit = 15) => invoke('graph_overview', { queueLimit }),
 
 	/** Manually set a word's mastery: status = "known" | "partial" | "unknown". */
 	setLexemeStatus: (lexemeId, status) =>

@@ -74,9 +74,12 @@ async fn record_story_read(
 }
 
 #[tauri::command]
-async fn graph_overview(state: State<'_, AppState>) -> Result<GraphOverview, String> {
+async fn graph_overview(
+    state: State<'_, AppState>,
+    queue_limit: Option<usize>,
+) -> Result<GraphOverview, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
-    service::graph_overview(store.as_ref(), &cfg, learner, 15)
+    service::graph_overview(store.as_ref(), &cfg, learner, queue_limit.unwrap_or(15))
         .await
         .map_err(|e| e.to_string())
 }
@@ -113,7 +116,7 @@ pub fn run() {
 
             // First-run seeding + resolve the single learner. These touch only
             // storage, so blocking briefly during setup is fine.
-            tauri::async_runtime::block_on(seed::seed_if_empty(store.as_ref(), &language))?;
+            tauri::async_runtime::block_on(seed::sync_inventory(store.as_ref(), &language))?;
             let learner = tauri::async_runtime::block_on(service::default_learner(
                 store.as_ref(),
                 language.clone(),

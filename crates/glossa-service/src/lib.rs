@@ -88,6 +88,10 @@ pub async fn next_content(
         .collect();
     let lemma_to_id: HashMap<String, LexemeId> =
         lex_by_lemma.iter().map(|(k, l)| (k.clone(), l.id)).collect();
+    let lemma_gloss: HashMap<String, Option<String>> = lex_by_lemma
+        .iter()
+        .map(|(k, l)| (k.clone(), l.gloss.clone()))
+        .collect();
 
     // Effective (decayed) status per lexeme the learner has state for.
     let id_status: HashMap<LexemeId, TokenStatus> = lexeme_states
@@ -104,7 +108,8 @@ pub async fn next_content(
         .map(|w| w.to_lowercase())
         .collect();
 
-    let (tokens, known_ratio) = tokenize(&generated.text, &new_set, &lemma_to_id, &id_status);
+    let (tokens, known_ratio) =
+        tokenize(&generated.text, &new_set, &lemma_to_id, &id_status, &lemma_gloss);
 
     // Words used/introduced, resolved to ids for the event-driven mastery model.
     let resolve = |lemmas: &[String]| -> Vec<LexemeId> {
@@ -128,6 +133,7 @@ pub async fn next_content(
                 lemma: lemma.clone(),
                 lexeme_id: lx.map(|l| l.id),
                 pos: lx.map(|l| l.pos),
+                gloss: lx.and_then(|l| l.gloss.clone()),
             }
         })
         .collect();
@@ -154,6 +160,7 @@ pub async fn next_content(
         text: generated.text,
         tokens,
         new_words,
+        translation: generated.translation,
         grammar_targeted: generated.grammar_targeted,
         known_ratio,
     })
@@ -289,6 +296,7 @@ fn tokenize(
     new_lemmas: &HashSet<String>,
     lemma_to_id: &HashMap<String, LexemeId>,
     id_status: &HashMap<LexemeId, TokenStatus>,
+    lemma_gloss: &HashMap<String, Option<String>>,
 ) -> (Vec<Token>, f32) {
     // Group consecutive chars by alphabetic-ness so punctuation/whitespace is
     // preserved verbatim as non-word tokens.
@@ -312,6 +320,7 @@ fn tokenize(
                 is_word: false,
                 status: None,
                 lexeme_id: None,
+                gloss: None,
             });
             continue;
         }
@@ -328,11 +337,13 @@ fn tokenize(
         if matches!(status, TokenStatus::Known | TokenStatus::Partial) {
             known_like += 1;
         }
+        let gloss = lemma_gloss.get(&norm).cloned().flatten();
         tokens.push(Token {
             text,
             is_word: true,
             status: Some(status),
             lexeme_id,
+            gloss,
         });
     }
 
@@ -358,6 +369,7 @@ mod tests {
             lemma: lemma.into(),
             pos: PartOfSpeech::Noun,
             frequency_rank: rank,
+            gloss: Some(format!("{lemma}-en")),
         }
     }
 

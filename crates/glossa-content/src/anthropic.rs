@@ -116,9 +116,16 @@ fn output_schema() -> serde_json::Value {
                 "text": { "type": "string" },
                 "known_words_used": { "type": "array", "items": { "type": "string" } },
                 "new_words_introduced": { "type": "array", "items": { "type": "string" } },
-                "grammar_targeted": { "type": "string" }
+                "grammar_targeted": { "type": "string" },
+                "translation": { "type": "string" }
             },
-            "required": ["text", "known_words_used", "new_words_introduced", "grammar_targeted"],
+            "required": [
+                "text",
+                "known_words_used",
+                "new_words_introduced",
+                "grammar_targeted",
+                "translation"
+            ],
             "additionalProperties": false
         }
     })
@@ -161,8 +168,9 @@ fn build_prompts(request: &ContentRequest) -> (String, String) {
     }
     system.push_str(
         "Return the structured fields: the generated text; the known words you actually used \
-         (drawn from the provided list); the new words you introduced; and the grammar pattern \
-         label you targeted (empty string if none).",
+         (drawn from the provided list); the new words you introduced; the grammar pattern \
+         label you targeted (empty string if none); and a natural English translation of the \
+         whole text so the learner can check their understanding.",
     );
 
     let new_list = if new_words.is_empty() {
@@ -220,19 +228,18 @@ struct Wire {
     known_words_used: Vec<String>,
     new_words_introduced: Vec<String>,
     grammar_targeted: String,
+    translation: String,
 }
 
 impl From<Wire> for GeneratedContent {
     fn from(w: Wire) -> Self {
+        let blank_to_none = |s: String| if s.trim().is_empty() { None } else { Some(s) };
         GeneratedContent {
             text: w.text,
             known_words_used: w.known_words_used,
             new_words_introduced: w.new_words_introduced,
-            grammar_targeted: if w.grammar_targeted.trim().is_empty() {
-                None
-            } else {
-                Some(w.grammar_targeted)
-            },
+            grammar_targeted: blank_to_none(w.grammar_targeted),
+            translation: blank_to_none(w.translation),
         }
     }
 }
@@ -249,6 +256,7 @@ mod tests {
             lemma: lemma.into(),
             pos: PartOfSpeech::Verb,
             frequency_rank: id as u32,
+            gloss: None,
         }
     }
 
@@ -282,9 +290,11 @@ mod tests {
             known_words_used: vec!["hola".into()],
             new_words_introduced: vec![],
             grammar_targeted: "  ".into(),
+            translation: "Hello.".into(),
         };
         let gc: GeneratedContent = wire.into();
         assert!(gc.grammar_targeted.is_none());
+        assert_eq!(gc.translation.as_deref(), Some("Hello."));
     }
 
     #[test]

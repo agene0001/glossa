@@ -274,6 +274,7 @@ mod tests {
                     lemma: "comer".into(),
                     pos: PartOfSpeech::Verb,
                     frequency_rank: 1,
+                    gloss: Some("to eat".into()),
                 }])
                 .await
                 .unwrap();
