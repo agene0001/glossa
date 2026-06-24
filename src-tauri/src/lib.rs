@@ -102,6 +102,53 @@ async fn set_lexeme_status(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn roadmap(state: State<'_, AppState>) -> Result<Vec<service::RoadmapUnit>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::roadmap(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn unit_lesson(
+    state: State<'_, AppState>,
+    unit_id: i64,
+) -> Result<service::UnitLesson, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::unit_lesson(store.as_ref(), &cfg, learner, unit_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn complete_unit_lesson(
+    state: State<'_, AppState>,
+    unit_id: i64,
+    understood: bool,
+) -> Result<(), String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::complete_unit_lesson(store.as_ref(), &cfg, learner, unit_id, understood)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn next_content_for_unit(
+    state: State<'_, AppState>,
+    unit_id: i64,
+) -> Result<ContentResponse, String> {
+    let (store, generator, cfg, learner) = (
+        state.store.clone(),
+        state.generator.clone(),
+        state.cfg.clone(),
+        state.learner_id,
+    );
+    service::next_content_for_unit(store.as_ref(), generator.as_ref(), &cfg, learner, unit_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -147,6 +194,10 @@ pub fn run() {
             record_story_read,
             graph_overview,
             set_lexeme_status,
+            roadmap,
+            unit_lesson,
+            complete_unit_lesson,
+            next_content_for_unit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Glossa");

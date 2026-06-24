@@ -73,3 +73,19 @@ impl From<i64> for PatternId {
         Self(value)
     }
 }
+
+/// Identifies a curriculum unit (an ordered step on the learning roadmap).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct UnitId(pub i64);
+
+impl fmt::Display for UnitId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<i64> for UnitId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}

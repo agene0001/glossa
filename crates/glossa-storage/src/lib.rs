@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use glossa_core::{
     GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile, LearningEvent, Lexeme,
-    LexemeId, LexemeState, PatternId,
+    LexemeId, LexemeState, PatternId, Unit,
 };
 
 /// A persisted story/sentence set. Mirrors the `stories` table (§6) plus the
@@ -82,6 +82,11 @@ pub trait Store: Send + Sync {
     async fn lexeme_count(&self, language: &LanguageCode) -> Result<usize>;
     async fn upsert_lexemes(&self, lexemes: &[Lexeme]) -> Result<()>;
     async fn upsert_grammar_patterns(&self, patterns: &[GrammarPattern]) -> Result<()>;
+
+    // --- curriculum units (seeded reference content) ---------------------
+
+    async fn units(&self, language: &LanguageCode) -> Result<Vec<Unit>>;
+    async fn upsert_units(&self, units: &[Unit]) -> Result<()>;
 
     // --- per-learner mastery state ---------------------------------------
 

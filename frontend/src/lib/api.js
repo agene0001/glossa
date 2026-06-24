@@ -20,7 +20,22 @@ export const api = {
 
 	/** Manually set a word's mastery: status = "known" | "partial" | "unknown". */
 	setLexemeStatus: (lexemeId, status) =>
-		invoke('set_lexeme_status', { lexemeId, status })
+		invoke('set_lexeme_status', { lexemeId, status }),
+
+	// --- curriculum / roadmap ---
+
+	/** The learning roadmap: units with progress + lock state. */
+	roadmap: () => invoke('roadmap'),
+
+	/** Full lesson payload for one unit (authored examples + vocab). */
+	unitLesson: (unitId) => invoke('unit_lesson', { unitId }),
+
+	/** Record that a unit's lesson was studied (advances its words). */
+	completeUnitLesson: (unitId, understood) =>
+		invoke('complete_unit_lesson', { unitId, understood }),
+
+	/** Extra AI practice scoped to a unit's vocabulary. */
+	nextContentForUnit: (unitId) => invoke('next_content_for_unit', { unitId })
 };
 
 /** True when running inside the Tauri webview (vs. a plain browser tab). */

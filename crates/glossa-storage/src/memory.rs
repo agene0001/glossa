@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use glossa_core::{
     GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile, LearningEvent, Lexeme,
-    LexemeId, LexemeState, PatternId,
+    LexemeId, LexemeState, PatternId, Unit,
 };
 
 use crate::{Result, StorageError, Store, StoredStory};
@@ -35,6 +35,8 @@ struct Db {
     learners: Vec<LearnerProfile>,
     lexemes: Vec<Lexeme>,
     grammar_patterns: Vec<GrammarPattern>,
+    #[serde(default)]
+    units: Vec<Unit>,
     /// learner -> (lexeme -> state)
     lexeme_states: HashMap<LearnerId, HashMap<LexemeId, LexemeState>>,
     /// learner -> (pattern -> state)
@@ -166,6 +168,29 @@ impl Store for FileStore {
                 *slot = pat.clone();
             } else {
                 db.grammar_patterns.push(pat.clone());
+            }
+        }
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn units(&self, language: &LanguageCode) -> Result<Vec<Unit>> {
+        Ok(self
+            .read()
+            .units
+            .iter()
+            .filter(|u| &u.language == language)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert_units(&self, units: &[Unit]) -> Result<()> {
+        let mut db = self.write();
+        for unit in units {
+            if let Some(slot) = db.units.iter_mut().find(|u| u.id == unit.id) {
+                *slot = unit.clone();
+            } else {
+                db.units.push(unit.clone());
             }
         }
         self.persist(&db)?;

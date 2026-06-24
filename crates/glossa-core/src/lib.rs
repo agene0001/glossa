@@ -15,16 +15,18 @@ mod lang;
 mod learner;
 mod lexeme;
 mod mastery;
+mod unit;
 
 pub use content::{
     ContentKind, ContentRequest, ContentResponse, GeneratedContent, Token, TokenStatus, WordInfo,
 };
 pub use event::LearningEvent;
-pub use ids::{LearnerId, LexemeId, PatternId};
+pub use ids::{LearnerId, LexemeId, PatternId, UnitId};
 pub use lang::{LanguageCode, PartOfSpeech};
 pub use learner::LearnerProfile;
 pub use lexeme::{GrammarPattern, Lexeme};
 pub use mastery::{GrammarState, LexemeState, MasteryState};
+pub use unit::{ExampleSentence, Unit};
 
 /// Crate-wide error type. Kept intentionally small; domain logic rarely fails,
 /// and I/O errors belong to the crates that actually do I/O.

@@ -7,13 +7,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use glossa_content::ContentGenerator;
 use glossa_core::{
-    ContentResponse, LanguageCode, LearnerId, LearnerProfile, Lexeme, LexemeId, LexemeState,
-    MasteryState, Token, TokenStatus, WordInfo,
+    ContentRequest, ContentResponse, LanguageCode, LearnerId, LearnerProfile, Lexeme, LexemeId,
+    LexemeState, MasteryState, PartOfSpeech, Token, TokenStatus, Unit, WordInfo,
 };
 use glossa_graph::mastery::{apply_grammar_exposure, apply_lexeme_exposure, effective_mastery};
 use glossa_graph::select::{next_best_content, overview};
@@ -77,6 +78,36 @@ pub async fn next_content(
         cfg,
         now,
     );
+    generate_from_request(
+        store,
+        generator,
+        cfg,
+        learner_id,
+        &lexemes,
+        &lexeme_states,
+        now,
+        request,
+    )
+    .await
+}
+
+/// Shared back half of content generation: take a chosen [`ContentRequest`],
+/// generate it, resolve words to ids, tokenize for highlighting, persist the
+/// story, and build the frontend response. Used by both free practice
+/// ([`next_content`]) and unit-scoped practice ([`next_content_for_unit`]).
+#[allow(clippy::too_many_arguments)]
+async fn generate_from_request(
+    store: &dyn Store,
+    generator: &dyn ContentGenerator,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    lexemes: &[Lexeme],
+    lexeme_states: &[LexemeState],
+    now: DateTime<Utc>,
+    request: ContentRequest,
+) -> Result<ContentResponse> {
+    let language = request.language.clone();
+    let kind = request.kind;
     let grammar_pattern_id = request.grammar_target.as_ref().map(|g| g.id);
 
     let generated = generator.generate(&request).await?;
@@ -156,7 +187,7 @@ pub async fn next_content(
     Ok(ContentResponse {
         story_id,
         language,
-        kind: request.kind,
+        kind,
         text: generated.text,
         tokens,
         new_words,
@@ -278,6 +309,383 @@ pub async fn set_lexeme_status(
     Ok(())
 }
 
+// --- curriculum / roadmap ------------------------------------------------
+
+/// A unit as shown on the roadmap: progress + whether it's reachable yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoadmapUnit {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub target_total: usize,
+    pub known: usize,
+    pub partial: usize,
+    /// Mastery-weighted progress, 0..=100 (Known = full, Partial = half).
+    pub percent: u32,
+    pub state: UnitState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnitState {
+    Locked,
+    Active,
+    Done,
+}
+
+/// One of a unit's target words, with the learner's current status.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitWord {
+    pub lexeme_id: i64,
+    pub lemma: String,
+    pub pos: PartOfSpeech,
+    pub gloss: Option<String>,
+    pub status: TokenStatus,
+}
+
+/// An authored example, tokenized for highlighting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LessonExample {
+    pub tokens: Vec<Token>,
+    pub translation: String,
+}
+
+/// The full lesson payload for one unit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitLesson {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub grammar: Option<String>,
+    pub examples: Vec<LessonExample>,
+    pub words: Vec<UnitWord>,
+    pub percent: u32,
+}
+
+/// Mastery-weighted progress over a unit's target words.
+fn unit_progress(
+    unit: &Unit,
+    states: &HashMap<LexemeId, &LexemeState>,
+    cfg: &GraphConfig,
+    now: DateTime<Utc>,
+) -> (usize, usize, u32) {
+    let (mut known, mut partial, mut score) = (0usize, 0usize, 0.0f32);
+    for id in &unit.target_lexemes {
+        let m = states
+            .get(id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+            .unwrap_or(MasteryState::Unknown);
+        match m {
+            MasteryState::Known => {
+                known += 1;
+                score += 1.0;
+            }
+            MasteryState::Partial { .. } => {
+                partial += 1;
+                score += 0.5;
+            }
+            MasteryState::Unknown => {}
+        }
+    }
+    let total = unit.target_lexemes.len();
+    let percent = if total == 0 {
+        0
+    } else {
+        ((score / total as f32) * 100.0).round() as u32
+    };
+    (known, partial, percent)
+}
+
+/// The learning roadmap: every unit with progress and lock state. A unit is
+/// reachable once the previous one is at least half learned (spec direction:
+/// give progress a visible shape on top of the graph).
+pub async fn roadmap(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<Vec<RoadmapUnit>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let mut units = store.units(&language).await?;
+    units.sort_by_key(|u| u.id);
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let states = lexeme_state_map(&states_vec);
+    let now = Utc::now();
+
+    let mut out = Vec::with_capacity(units.len());
+    let mut prev_percent = 100u32; // the first unit is always unlocked
+    for (i, u) in units.iter().enumerate() {
+        let (known, partial, percent) = unit_progress(u, &states, cfg, now);
+        let unlocked = i == 0 || prev_percent >= 50;
+        let state = if !unlocked {
+            UnitState::Locked
+        } else if percent >= 80 {
+            UnitState::Done
+        } else {
+            UnitState::Active
+        };
+        out.push(RoadmapUnit {
+            id: u.id.0,
+            title: u.title.clone(),
+            description: u.description.clone(),
+            target_total: u.target_lexemes.len(),
+            known,
+            partial,
+            percent,
+            state,
+        });
+        prev_percent = percent;
+    }
+    Ok(out)
+}
+
+/// Build a `HashMap<LexemeId, &LexemeState>` view.
+fn lexeme_state_map(states: &[LexemeState]) -> HashMap<LexemeId, &LexemeState> {
+    states.iter().map(|s| (s.lexeme_id, s)).collect()
+}
+
+/// The lesson for one unit: its authored examples (tokenized + translated) and
+/// its target vocabulary with the learner's current status.
+pub async fn unit_lesson(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    unit_id: i64,
+) -> Result<UnitLesson> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let unit = store
+        .units(&language)
+        .await?
+        .into_iter()
+        .find(|u| u.id.0 == unit_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("unit {unit_id}")))?;
+
+    let lexemes = store.lexemes(&language).await?;
+    let grammar_patterns = store.grammar_patterns(&language).await?;
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+    let lemma_to_id: HashMap<String, LexemeId> = lexemes
+        .iter()
+        .map(|l| (l.lemma.to_lowercase(), l.id))
+        .collect();
+    let lemma_gloss: HashMap<String, Option<String>> = lexemes
+        .iter()
+        .map(|l| (l.lemma.to_lowercase(), l.gloss.clone()))
+        .collect();
+    let id_status: HashMap<LexemeId, TokenStatus> = states_vec
+        .iter()
+        .map(|s| {
+            let m = effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery);
+            (s.lexeme_id, mastery_to_token(m))
+        })
+        .collect();
+
+    // A unit target word counts as "new" for highlighting if still unknown.
+    let new_set: HashSet<String> = unit
+        .target_lexemes
+        .iter()
+        .filter(|id| id_status.get(id).copied().unwrap_or(TokenStatus::Unknown) == TokenStatus::Unknown)
+        .filter_map(|id| lex_by_id.get(id).map(|l| l.lemma.to_lowercase()))
+        .collect();
+
+    let examples = unit
+        .examples
+        .iter()
+        .map(|ex| {
+            let (tokens, _) =
+                tokenize(&ex.text, &new_set, &lemma_to_id, &id_status, &lemma_gloss);
+            LessonExample {
+                tokens,
+                translation: ex.translation.clone(),
+            }
+        })
+        .collect();
+
+    let words: Vec<UnitWord> = unit
+        .target_lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).map(|l| (id, l)))
+        .map(|(id, l)| UnitWord {
+            lexeme_id: id.0,
+            lemma: l.lemma.clone(),
+            pos: l.pos,
+            gloss: l.gloss.clone(),
+            status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
+        })
+        .collect();
+
+    let grammar = unit
+        .target_pattern
+        .and_then(|pid| grammar_patterns.iter().find(|p| p.id == pid).map(|p| p.label.clone()));
+
+    let (_, _, percent) = unit_progress(&unit, &lexeme_state_map(&states_vec), cfg, now);
+
+    Ok(UnitLesson {
+        id: unit.id.0,
+        title: unit.title,
+        description: unit.description,
+        grammar,
+        examples,
+        words,
+        percent,
+    })
+}
+
+/// Record that the learner studied a unit's lesson, crediting an exposure to
+/// every target word (and the unit's grammar pattern). Advances roadmap
+/// progress through the same event-driven mastery model as story reads.
+pub async fn complete_unit_lesson(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    unit_id: i64,
+    understood: bool,
+) -> Result<()> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let unit = store
+        .units(&language)
+        .await?
+        .into_iter()
+        .find(|u| u.id.0 == unit_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("unit {unit_id}")))?;
+
+    let now = Utc::now();
+    let mut states: HashMap<LexemeId, LexemeState> = store
+        .lexeme_states(learner_id)
+        .await?
+        .into_iter()
+        .map(|s| (s.lexeme_id, s))
+        .collect();
+    let mut updated = Vec::with_capacity(unit.target_lexemes.len());
+    for id in &unit.target_lexemes {
+        let current = states.remove(id).unwrap_or_else(|| LexemeState::unseen(*id));
+        updated.push(apply_lexeme_exposure(current, understood, now, &cfg.mastery));
+    }
+    store.upsert_lexeme_states(learner_id, &updated).await?;
+
+    if let Some(pattern_id) = unit.target_pattern {
+        let current = store
+            .grammar_states(learner_id)
+            .await?
+            .into_iter()
+            .find(|s| s.pattern_id == pattern_id)
+            .unwrap_or_else(|| glossa_core::GrammarState::unseen(pattern_id));
+        let next = apply_grammar_exposure(current, understood, now, &cfg.mastery);
+        store.upsert_grammar_states(learner_id, &[next]).await?;
+    }
+
+    store
+        .append_event(
+            learner_id,
+            &glossa_core::LearningEvent::StoryRead {
+                story_id: Uuid::new_v4(),
+                words_seen: unit.target_lexemes.clone(),
+                understood,
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+/// Extra AI practice scoped to a unit: new words are drawn only from that
+/// unit's still-unknown vocabulary (the rest of the loop is shared).
+pub async fn next_content_for_unit(
+    store: &dyn Store,
+    generator: &dyn ContentGenerator,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    unit_id: i64,
+) -> Result<ContentResponse> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let unit = store
+        .units(&language)
+        .await?
+        .into_iter()
+        .find(|u| u.id.0 == unit_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("unit {unit_id}")))?;
+
+    let lexemes = store.lexemes(&language).await?;
+    let lexeme_states = store.lexeme_states(learner_id).await?;
+    let grammar_patterns = store.grammar_patterns(&language).await?;
+    let now = Utc::now();
+
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+    let mastery_of = |id: LexemeId| -> MasteryState {
+        lexeme_states
+            .iter()
+            .find(|s| s.lexeme_id == id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+            .unwrap_or(MasteryState::Unknown)
+    };
+
+    // Building blocks: any word the learner has met, most frequent first.
+    let mut known_vocab: Vec<Lexeme> = lexemes
+        .iter()
+        .filter(|l| !mastery_of(l.id).is_unknown())
+        .cloned()
+        .collect();
+    known_vocab.sort_by_key(|l| l.frequency_rank);
+    known_vocab.truncate(cfg.next_content.known_vocab_window);
+
+    // New words: only this unit's still-unknown target words.
+    let mut new_targets: Vec<Lexeme> = unit
+        .target_lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).copied())
+        .filter(|l| mastery_of(l.id).is_unknown())
+        .cloned()
+        .collect();
+    new_targets.sort_by_key(|l| l.frequency_rank);
+    new_targets.truncate(cfg.next_content.new_word_budget.max(1));
+
+    let grammar_target = unit
+        .target_pattern
+        .and_then(|pid| grammar_patterns.iter().find(|p| p.id == pid).cloned());
+
+    let request = ContentRequest {
+        learner_id,
+        language: language.clone(),
+        kind: cfg.next_content.kind,
+        known_vocab,
+        new_targets,
+        grammar_target,
+        known_ratio: cfg.next_content.known_ratio,
+    };
+
+    generate_from_request(
+        store,
+        generator,
+        cfg,
+        learner_id,
+        &lexemes,
+        &lexeme_states,
+        now,
+        request,
+    )
+    .await
+}
+
 fn mastery_to_token(m: MasteryState) -> TokenStatus {
     match m {
         MasteryState::Known => TokenStatus::Known,
@@ -359,7 +767,7 @@ fn tokenize(
 mod tests {
     use super::*;
     use glossa_content::MockContentGenerator;
-    use glossa_core::PartOfSpeech;
+    use glossa_core::{ExampleSentence, PartOfSpeech, UnitId};
     use glossa_storage::FileStore;
 
     fn lex(id: i64, lemma: &str, rank: u32) -> Lexeme {
@@ -418,5 +826,53 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ov.known, 1);
+    }
+
+    #[tokio::test]
+    async fn roadmap_progress_and_unit_lesson() {
+        let store = FileStore::ephemeral().unwrap();
+        let cfg = GraphConfig::default();
+        store
+            .upsert_lexemes(&[lex(1, "yo", 1), lex(2, "comer", 2), lex(3, "pan", 3)])
+            .await
+            .unwrap();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+        store
+            .upsert_units(&[Unit {
+                id: UnitId(1),
+                language: LanguageCode::spanish(),
+                title: "Eating".into(),
+                description: "food".into(),
+                target_lexemes: vec![LexemeId(1), LexemeId(2), LexemeId(3)],
+                target_pattern: None,
+                examples: vec![ExampleSentence {
+                    text: "Yo como pan.".into(),
+                    translation: "I eat bread.".into(),
+                }],
+            }])
+            .await
+            .unwrap();
+
+        // Fresh learner → unit is active, 0%.
+        let rm = roadmap(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(rm.len(), 1);
+        assert_eq!(rm[0].state, UnitState::Active);
+        assert_eq!(rm[0].percent, 0);
+
+        // Lesson tokenizes the authored example and lists the vocab.
+        let lesson = unit_lesson(&store, &cfg, learner.id, 1).await.unwrap();
+        assert!(!lesson.examples[0].tokens.is_empty());
+        assert_eq!(lesson.words.len(), 3);
+
+        // Studying the unit advances its words → unit becomes done.
+        for _ in 0..6 {
+            complete_unit_lesson(&store, &cfg, learner.id, 1, true)
+                .await
+                .unwrap();
+        }
+        let rm2 = roadmap(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(rm2[0].state, UnitState::Done, "got {:?}", rm2[0]);
     }
 }

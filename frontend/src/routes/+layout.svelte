@@ -10,7 +10,7 @@
 	let statusError = $state(false);
 
 	const links = [
-		{ href: '/', label: 'Reading' },
+		{ href: '/', label: 'Learn' },
 		{ href: '/review', label: 'Review' },
 		{ href: '/chat', label: 'Chat', tag: 'Phase 2' },
 		{ href: '/stats', label: 'Stats', tag: 'soon' }

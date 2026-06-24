@@ -17,13 +17,17 @@ with the **Anthropic API** for generation.
 
 ## What works in V1
 
+- **Roadmap (Learn tab)** — an ordered path of themed units (Duolingo-style)
+  with visible progress and lock state, so you always know where you are and
+  what's next. A unit unlocks once the previous one is half learned.
+- **Unit lessons** — each unit teaches a small set of words + a grammar focus
+  through **hand-authored, coherent example sentences** (with meanings and
+  translations) — so lessons read well even with no API key. Tap any word for
+  its meaning; mark words known. When an API key is set, a unit also offers
+  **AI practice** that introduces only that unit's words.
 - **Onboarding** — first launch asks whether you're a beginner or already know
-  some words; the placement step lets you tick known words so content starts at
-  the right level.
-- **Reading view** — generates comprehensible-input content, highlights every
-  word by your mastery (known / learning / new / unknown), shows a glossary of
-  the new words **with meanings**, and lets you reveal a full translation. Tap
-  any word to see what it means (and mark it known from there).
+  some words; the placement step lets you tick known words so the roadmap starts
+  at the right level.
 - **Knowledge graph** — frequency-weighted next-word selection, mastery
   transitions with recency decay, all driven by an append-only event log.
 - **Review view** — known/learning/unseen counts, grammar-pattern progress, and
