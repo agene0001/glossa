@@ -8,6 +8,17 @@
 
 	let status = $state(null);
 	let statusError = $state(false);
+	let langs = $state([]);
+
+	async function changeLang(e) {
+		const code = e.currentTarget.value;
+		try {
+			await api.setTargetLanguage(code);
+			location.reload(); // simplest reliable way to re-fetch everything
+		} catch {
+			/* ignore */
+		}
+	}
 
 	const links = [
 		{ href: '/', label: 'Learn' },
@@ -24,6 +35,11 @@
 		} catch {
 			statusError = true;
 		}
+		try {
+			langs = await api.availableLanguages();
+		} catch {
+			/* ignore */
+		}
 	});
 </script>
 
@@ -38,13 +54,25 @@
 		<div class="spacer"></div>
 		<div class="status">
 			{#if status}
-				Engine:
-				{#if status.generator === 'anthropic'}
-					<span class="badge live">live</span>
-				{:else}
-					<span class="badge mock">mock</span>
+				<div class="srow">
+					Engine:
+					{#if status.generator === 'anthropic'}
+						<span class="badge live">live</span>
+					{:else}
+						<span class="badge mock">mock</span>
+					{/if}
+				</div>
+				<label class="lang-row">
+					<span>Language</span>
+					<select onchange={changeLang} value={status.language}>
+						{#each langs as l (l.code)}
+							<option value={l.code}>{l.name}</option>
+						{/each}
+					</select>
+				</label>
+				{#if status.streak > 0}
+					<div class="streak">🔥 {status.streak}-day streak</div>
 				{/if}
-				<br />Target: <strong>{status.language}</strong>
 			{:else if statusError}
 				<span class="muted">backend offline — open via <code>npm run dev</code></span>
 			{:else}

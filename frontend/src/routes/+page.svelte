@@ -8,12 +8,14 @@
 	let booting = $state(true);
 	let showOnboarding = $state(false);
 	let live = $state(false);
+	let lang = $state('es');
 	let selectedUnit = $state(null);
 
 	onMount(async () => {
 		try {
 			const s = await api.backendStatus();
 			live = s.generator === 'anthropic';
+			lang = s.language || 'es';
 		} catch {
 			/* ignore */
 		}
@@ -50,7 +52,7 @@
 	<Onboarding onDone={onboardingDone} />
 {:else if selectedUnit !== null}
 	{#key selectedUnit}
-		<UnitLesson unitId={selectedUnit} {live} onBack={backToRoadmap} />
+		<UnitLesson unitId={selectedUnit} {live} {lang} onBack={backToRoadmap} />
 	{/key}
 {:else}
 	<Roadmap onOpen={openUnit} />

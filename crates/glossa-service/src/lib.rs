@@ -357,9 +357,20 @@ pub struct UnitLesson {
     pub title: String,
     pub description: String,
     pub grammar: Option<String>,
+    /// Learner-facing grammar explanation (opt-in tip), if the pattern has one.
+    pub grammar_tip: Option<String>,
     pub examples: Vec<LessonExample>,
     pub words: Vec<UnitWord>,
     pub percent: u32,
+}
+
+/// Outcome of studying a unit, for the post-lesson celebration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LessonResult {
+    pub newly_known: usize,
+    pub percent: u32,
+    pub done: bool,
+    pub streak: u32,
 }
 
 /// Mastery-weighted progress over a unit's target words.
@@ -525,9 +536,11 @@ pub async fn unit_lesson(
         })
         .collect();
 
-    let grammar = unit
+    let pattern = unit
         .target_pattern
-        .and_then(|pid| grammar_patterns.iter().find(|p| p.id == pid).map(|p| p.label.clone()));
+        .and_then(|pid| grammar_patterns.iter().find(|p| p.id == pid));
+    let grammar = pattern.map(|p| p.label.clone());
+    let grammar_tip = pattern.and_then(|p| p.explanation.clone());
 
     let (_, _, percent) = unit_progress(&unit, &lexeme_state_map(&states_vec), cfg, now);
 
@@ -536,6 +549,7 @@ pub async fn unit_lesson(
         title: unit.title,
         description: unit.description,
         grammar,
+        grammar_tip,
         examples,
         words,
         percent,
@@ -551,7 +565,7 @@ pub async fn complete_unit_lesson(
     learner_id: LearnerId,
     unit_id: i64,
     understood: bool,
-) -> Result<()> {
+) -> Result<LessonResult> {
     let profile = store
         .get_learner(learner_id)
         .await?
@@ -572,12 +586,28 @@ pub async fn complete_unit_lesson(
         .into_iter()
         .map(|s| (s.lexeme_id, s))
         .collect();
+
+    let is_known = |st: Option<&LexemeState>| {
+        st.map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery).is_known())
+            .unwrap_or(false)
+    };
+    let known_before = unit
+        .target_lexemes
+        .iter()
+        .filter(|id| is_known(states.get(id)))
+        .count();
+
     let mut updated = Vec::with_capacity(unit.target_lexemes.len());
     for id in &unit.target_lexemes {
         let current = states.remove(id).unwrap_or_else(|| LexemeState::unseen(*id));
         updated.push(apply_lexeme_exposure(current, understood, now, &cfg.mastery));
     }
     store.upsert_lexeme_states(learner_id, &updated).await?;
+
+    let known_after = updated.iter().filter(|s| is_known(Some(s))).count();
+    let after_map: HashMap<LexemeId, &LexemeState> =
+        updated.iter().map(|s| (s.lexeme_id, s)).collect();
+    let (_, _, percent) = unit_progress(&unit, &after_map, cfg, now);
 
     if let Some(pattern_id) = unit.target_pattern {
         let current = store
@@ -600,6 +630,59 @@ pub async fn complete_unit_lesson(
             },
         )
         .await?;
+
+    let streak = compute_streak(&store.activity_dates(learner_id).await?, Utc::now());
+
+    Ok(LessonResult {
+        newly_known: known_after.saturating_sub(known_before),
+        percent,
+        done: percent >= 80,
+        streak,
+    })
+}
+
+/// The learner's current daily streak: consecutive days (UTC) with at least one
+/// event, ending today or yesterday.
+pub async fn streak(store: &dyn Store, learner_id: LearnerId) -> Result<u32> {
+    Ok(compute_streak(
+        &store.activity_dates(learner_id).await?,
+        Utc::now(),
+    ))
+}
+
+fn compute_streak(dates: &[DateTime<Utc>], now: DateTime<Utc>) -> u32 {
+    let days: HashSet<i64> = dates.iter().map(|d| d.timestamp().div_euclid(86_400)).collect();
+    if days.is_empty() {
+        return 0;
+    }
+    let today = now.timestamp().div_euclid(86_400);
+    let mut day = if days.contains(&today) {
+        today
+    } else if days.contains(&(today - 1)) {
+        today - 1
+    } else {
+        return 0;
+    };
+    let mut count = 0u32;
+    while days.contains(&day) {
+        count += 1;
+        day -= 1;
+    }
+    count
+}
+
+/// Switch the learner's active target language (e.g. "es" → "fr").
+pub async fn set_target_language(
+    store: &dyn Store,
+    learner_id: LearnerId,
+    code: &str,
+) -> Result<()> {
+    let mut profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    profile.target_language = LanguageCode::new(code);
+    store.update_learner(&profile).await?;
     Ok(())
 }
 

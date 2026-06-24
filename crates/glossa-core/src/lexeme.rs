@@ -34,4 +34,8 @@ pub struct GrammarPattern {
     /// mandatory rule gate — only as opt-in support once it has recurred.
     pub label: String,
     pub example_template: String,
+    /// Optional learner-facing explanation, shown as a tip inside a unit lesson
+    /// (spec §2.2: surfaced only as opt-in support, never a gate).
+    #[serde(default)]
+    pub explanation: Option<String>,
 }

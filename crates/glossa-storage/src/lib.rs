@@ -75,6 +75,9 @@ pub trait Store: Send + Sync {
 
     async fn get_learner(&self, id: LearnerId) -> Result<Option<LearnerProfile>>;
 
+    /// Persist changes to an existing learner (e.g. switching target language).
+    async fn update_learner(&self, learner: &LearnerProfile) -> Result<()>;
+
     // --- reference inventory (seeded) ------------------------------------
 
     async fn lexemes(&self, language: &LanguageCode) -> Result<Vec<Lexeme>>;
@@ -104,4 +107,7 @@ pub trait Store: Send + Sync {
     async fn append_event(&self, learner: LearnerId, event: &LearningEvent) -> Result<()>;
     async fn save_story(&self, story: &StoredStory) -> Result<()>;
     async fn get_story(&self, id: Uuid) -> Result<Option<StoredStory>>;
+
+    /// Timestamps of the learner's events, for streak/activity computations.
+    async fn activity_dates(&self, learner: LearnerId) -> Result<Vec<DateTime<Utc>>>;
 }

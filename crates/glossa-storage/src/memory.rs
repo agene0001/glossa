@@ -119,6 +119,17 @@ impl Store for FileStore {
         Ok(self.read().learners.iter().find(|l| l.id == id).cloned())
     }
 
+    async fn update_learner(&self, learner: &LearnerProfile) -> Result<()> {
+        let mut db = self.write();
+        if let Some(slot) = db.learners.iter_mut().find(|l| l.id == learner.id) {
+            *slot = learner.clone();
+        } else {
+            db.learners.push(learner.clone());
+        }
+        self.persist(&db)?;
+        Ok(())
+    }
+
     async fn lexemes(&self, language: &LanguageCode) -> Result<Vec<Lexeme>> {
         Ok(self
             .read()
@@ -260,6 +271,16 @@ impl Store for FileStore {
 
     async fn get_story(&self, id: Uuid) -> Result<Option<StoredStory>> {
         Ok(self.read().stories.get(&id).cloned())
+    }
+
+    async fn activity_dates(&self, learner: LearnerId) -> Result<Vec<DateTime<Utc>>> {
+        Ok(self
+            .read()
+            .events
+            .iter()
+            .filter(|e| e.learner_id == learner)
+            .map(|e| e.created_at)
+            .collect())
     }
 }
 

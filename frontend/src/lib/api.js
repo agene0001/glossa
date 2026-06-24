@@ -35,7 +35,15 @@ export const api = {
 		invoke('complete_unit_lesson', { unitId, understood }),
 
 	/** Extra AI practice scoped to a unit's vocabulary. */
-	nextContentForUnit: (unitId) => invoke('next_content_for_unit', { unitId })
+	nextContentForUnit: (unitId) => invoke('next_content_for_unit', { unitId }),
+
+	// --- languages ---
+
+	/** Languages that have seeded content: [{ code, name }]. */
+	availableLanguages: () => invoke('available_languages'),
+
+	/** Switch the active target language (e.g. "fr"). */
+	setTargetLanguage: (code) => invoke('set_target_language', { code })
 };
 
 /** True when running inside the Tauri webview (vs. a plain browser tab). */

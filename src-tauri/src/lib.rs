@@ -25,7 +25,6 @@ struct AppState {
     generator: Arc<dyn ContentGenerator>,
     cfg: GraphConfig,
     learner_id: LearnerId,
-    language: LanguageCode,
     /// "anthropic" if a real API key is configured, else "mock".
     generator_kind: &'static str,
 }
@@ -34,17 +33,52 @@ struct AppState {
 struct BackendStatus {
     generator: &'static str,
     language: String,
+    streak: u32,
     learner_id: String,
 }
 
-/// Lightweight status for the UI banner (live vs. offline mock).
+#[derive(Serialize)]
+struct LanguageOption {
+    code: &'static str,
+    name: &'static str,
+}
+
+/// Status for the UI: engine (live/mock), current target language, streak.
 #[tauri::command]
-fn backend_status(state: State<'_, AppState>) -> BackendStatus {
-    BackendStatus {
-        generator: state.generator_kind,
-        language: state.language.as_str().to_string(),
-        learner_id: state.learner_id.to_string(),
-    }
+async fn backend_status(state: State<'_, AppState>) -> Result<BackendStatus, String> {
+    let (store, learner, kind) = (state.store.clone(), state.learner_id, state.generator_kind);
+    let language = store
+        .get_learner(learner)
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|p| p.target_language.as_str().to_string())
+        .unwrap_or_default();
+    let streak = service::streak(store.as_ref(), learner)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(BackendStatus {
+        generator: kind,
+        language,
+        streak,
+        learner_id: learner.to_string(),
+    })
+}
+
+/// Languages that have seeded content (for the picker).
+#[tauri::command]
+fn available_languages() -> Vec<LanguageOption> {
+    vec![
+        LanguageOption { code: "es", name: "Spanish" },
+        LanguageOption { code: "fr", name: "French" },
+    ]
+}
+
+#[tauri::command]
+async fn set_target_language(state: State<'_, AppState>, code: String) -> Result<(), String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    service::set_target_language(store.as_ref(), learner, &code)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -126,7 +160,7 @@ async fn complete_unit_lesson(
     state: State<'_, AppState>,
     unit_id: i64,
     understood: bool,
-) -> Result<(), String> {
+) -> Result<service::LessonResult, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
     service::complete_unit_lesson(store.as_ref(), &cfg, learner, unit_id, understood)
         .await
@@ -163,7 +197,7 @@ pub fn run() {
 
             // First-run seeding + resolve the single learner. These touch only
             // storage, so blocking briefly during setup is fine.
-            tauri::async_runtime::block_on(seed::sync_inventory(store.as_ref(), &language))?;
+            tauri::async_runtime::block_on(seed::sync_inventory(store.as_ref()))?;
             let learner = tauri::async_runtime::block_on(service::default_learner(
                 store.as_ref(),
                 language.clone(),
@@ -183,7 +217,6 @@ pub fn run() {
                 generator,
                 cfg: GraphConfig::default(),
                 learner_id: learner.id,
-                language,
                 generator_kind,
             });
             Ok(())
@@ -198,6 +231,8 @@ pub fn run() {
             unit_lesson,
             complete_unit_lesson,
             next_content_for_unit,
+            available_languages,
+            set_target_language,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Glossa");

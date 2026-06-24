@@ -23,8 +23,13 @@ with the **Anthropic API** for generation.
 - **Unit lessons** — each unit teaches a small set of words + a grammar focus
   through **hand-authored, coherent example sentences** (with meanings and
   translations) — so lessons read well even with no API key. Tap any word for
-  its meaning; mark words known. When an API key is set, a unit also offers
-  **AI practice** that introduces only that unit's words.
+  its meaning, tap **🔊 to hear it** (or the whole sentence) via the system
+  voice, and read an opt-in **grammar tip**. When an API key is set, a unit also
+  offers **AI practice** that introduces only that unit's words. Finishing a
+  lesson shows a completion celebration and keeps a **daily streak**.
+- **Multiple languages** — Spanish and French ship with full content; switch the
+  target language from the sidebar. The data model is language-namespaced, so
+  adding a language is just a frequency list + units (no schema changes).
 - **Onboarding** — first launch asks whether you're a beginner or already know
   some words; the placement step lets you tick known words so the roadmap starts
   at the right level.

@@ -330,6 +330,93 @@ button.link:hover {
 .vchip.unknown {
 	color: var(--muted);
 }
+.vchip .spk {
+	opacity: 0.5;
+	font-size: 0.8em;
+}
+
+/* sidebar language picker + streak */
+.status .srow {
+	margin-bottom: 0.5rem;
+}
+.lang-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin: 0.4rem 0;
+}
+.lang-row select {
+	background: var(--panel-2);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 7px;
+	padding: 0.25rem 0.4rem;
+	font: inherit;
+	font-size: 0.78rem;
+}
+.status .streak {
+	margin-top: 0.5rem;
+	color: var(--partial);
+	font-weight: 600;
+}
+
+/* grammar tip */
+.tip {
+	background: rgba(20, 184, 166, 0.08);
+	border: 1px solid rgba(20, 184, 166, 0.35);
+	border-radius: 12px;
+	padding: 0.9rem 1.1rem;
+	margin-bottom: 1.2rem;
+}
+.tip-label {
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--accent);
+	font-weight: 700;
+}
+.tip p {
+	margin: 0.35rem 0 0;
+}
+
+/* audio + example actions */
+.iconbtn {
+	border: none;
+	background: none;
+	padding: 0.1rem 0.3rem;
+	font-size: 1rem;
+	line-height: 1;
+}
+.iconbtn:hover {
+	transform: scale(1.15);
+}
+.ex-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-top: 0.2rem;
+}
+
+/* celebration */
+.celebrate {
+	text-align: center;
+	padding: 2.6rem 1.5rem;
+}
+.celebrate .emoji {
+	font-size: 3rem;
+}
+.celebrate h2 {
+	margin: 0.4rem 0 0.6rem;
+}
+.celebrate .streak-big {
+	color: var(--partial);
+	font-weight: 700;
+	font-size: 1.1rem;
+}
+.celebrate button {
+	margin-top: 1rem;
+}
 
 .legend {
 	display: flex;

@@ -273,6 +273,7 @@ mod tests {
                 language: LanguageCode::spanish(),
                 label: "preterite-regular-ar".into(),
                 example_template: "Ayer ___é ...".into(),
+                explanation: None,
             }),
             known_ratio: 0.95,
         };
