@@ -1,0 +1,26 @@
+[package]
+name = "glossa"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Glossa — AI-native language learning, desktop shell."
+
+# lib + bin split keeps the door open for Tauri 2 mobile targets (spec §4.1).
+[lib]
+name = "glossa_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+glossa-core.workspace = true
+glossa-graph.workspace = true
+glossa-content.workspace = true
+glossa-storage.workspace = true
+glossa-service.workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "glossa-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Transport-agnostic orchestration. No Tauri types, no HTTP types — the seam that makes the website transition cheap."
+
+[dependencies]
+glossa-core.workspace = true
+glossa-graph.workspace = true
+glossa-content.workspace = true
+glossa-storage.workspace = true
+serde.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

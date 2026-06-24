@@ -1,0 +1,17 @@
+{
+  "name": "glossa",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Glossa — AI-native language learning (Tauri + SvelteKit + Rust).",
+  "scripts": {
+    "setup": "npm install && npm --prefix frontend install",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0"
+  }
+}

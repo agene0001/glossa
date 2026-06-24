@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Glossa",
+  "version": "0.1.0",
+  "identifier": "com.glossa.app",
+  "build": {
+    "frontendDist": "../frontend/build",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "dot_clean -m . || true && npm --prefix frontend run dev",
+    "beforeBuildCommand": "dot_clean -m . || true && npm --prefix frontend run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Glossa",
+        "width": 1040,
+        "height": 760,
+        "minWidth": 720,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  }
+}

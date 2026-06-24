@@ -1,0 +1,47 @@
+//! `glossa-content` — generate comprehensible-input content from graph state.
+//!
+//! The [`ContentGenerator`] trait is the seam. Two implementations ship:
+//! - [`AnthropicContentGenerator`] — calls the Anthropic Messages API and
+//!   requests **structured JSON output** so new vs. reinforced words are logged
+//!   deterministically, never parsed from prose (spec §5, §7).
+//! - [`MockContentGenerator`] — deterministic, offline, no API key. Lets the
+//!   whole app run end-to-end before you wire up a key, and backs unit tests.
+//!
+//! Rust has no official Anthropic SDK, so the API client is thin `reqwest` over
+//! `POST /v1/messages` — the documented raw-HTTP path.
+
+mod anthropic;
+mod mock;
+
+pub use anthropic::{AnthropicContentGenerator, DEFAULT_MODEL};
+pub use mock::MockContentGenerator;
+
+use async_trait::async_trait;
+
+use glossa_core::{ContentRequest, GeneratedContent};
+
+/// Errors a generator can raise.
+#[derive(Debug, thiserror::Error)]
+pub enum ContentError {
+    #[error("http transport error: {0}")]
+    Http(#[from] reqwest::Error),
+    #[error("anthropic api error ({status}): {message}")]
+    Api { status: u16, message: String },
+    #[error("could not parse model output as the requested schema: {0}")]
+    Parse(String),
+    #[error("the model declined to generate this content (refusal)")]
+    Refusal,
+    #[error("the model returned no text content")]
+    NoContent,
+    #[error("missing configuration: {0}")]
+    Config(String),
+}
+
+pub type Result<T> = std::result::Result<T, ContentError>;
+
+/// Turns a graph-chosen [`ContentRequest`] into concrete text plus the
+/// structured record of which words it used and introduced.
+#[async_trait]
+pub trait ContentGenerator: Send + Sync {
+    async fn generate(&self, request: &ContentRequest) -> Result<GeneratedContent>;
+}

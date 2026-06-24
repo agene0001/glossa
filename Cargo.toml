@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/glossa-core",
+    "crates/glossa-graph",
+    "crates/glossa-content",
+    "crates/glossa-conversation",
+    "crates/glossa-voice",
+    "crates/glossa-storage",
+    "crates/glossa-service",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
+
+# Shared dependency versions live here so every crate stays on the same line.
+[workspace.dependencies]
+glossa-core = { path = "crates/glossa-core" }
+glossa-graph = { path = "crates/glossa-graph" }
+glossa-content = { path = "crates/glossa-content" }
+glossa-conversation = { path = "crates/glossa-conversation" }
+glossa-voice = { path = "crates/glossa-voice" }
+glossa-storage = { path = "crates/glossa-storage" }
+glossa-service = { path = "crates/glossa-service" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+async-trait = "0.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "fs", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = "0.1"
+
+[profile.release]
+# Tauri apps benefit from a slimmer binary; tune as you like.
+opt-level = "s"
+lto = true
+strip = true

@@ -1,0 +1,18 @@
+[package]
+name = "glossa-content"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LLM-backed comprehensible-input content generation (Anthropic API), with an offline mock."
+
+[dependencies]
+glossa-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

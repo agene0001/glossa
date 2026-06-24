@@ -1,0 +1,13 @@
+[package]
+name = "glossa-conversation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "AI tutor conversation engine + scenario library (Phase 2 — types defined, engine stubbed)."
+
+[dependencies]
+glossa-core.workspace = true
+serde.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true

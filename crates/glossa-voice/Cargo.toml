@@ -1,0 +1,9 @@
+[package]
+name = "glossa-voice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pluggable STT/TTS trait boundary (Phase 3 — no provider in V1)."
+
+[dependencies]
+thiserror.workspace = true

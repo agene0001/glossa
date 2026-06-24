@@ -1,0 +1,27 @@
+[package]
+name = "glossa-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Persistence for Glossa. File-backed store for V1; Postgres path documented in schema.sql."
+
+[dependencies]
+glossa-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+# The Postgres-backed Store (production path, spec §6) drops in here behind a
+# feature flag. Left unwired in V1 to keep the default build server-free.
+# [features]
+# postgres = ["dep:sqlx"]
+# [dependencies.sqlx]
+# version = "0.8"
+# optional = true
+# features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json"]

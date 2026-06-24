@@ -1,0 +1,36 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# Node / frontend
+node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/dist/
+.vite/
+
+# Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# Environment / secrets
+.env
+.env.local
+*.local
+
+# Local glossa data (file-backed store lives in the OS app-data dir, but allow a local override)
+/glossa-data/
+*.glossa.json
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local settings
+.claude/settings.local.json
