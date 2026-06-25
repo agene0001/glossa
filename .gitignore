@@ -14,6 +14,10 @@ frontend/dist/
 src-tauri/target/
 src-tauri/gen/
 
+# APFS build disk image (build cache lives here; see scripts/glossa-build-image.sh)
+*.sparseimage
+*.sparsebundle
+
 # Environment / secrets
 .env
 .env.local
@@ -25,6 +29,7 @@ src-tauri/gen/
 
 # OS noise
 .DS_Store
+._*
 Thumbs.db
 
 # Editor
