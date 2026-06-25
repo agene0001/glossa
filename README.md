@@ -164,18 +164,18 @@ macOS attaches to files — so macOS scatters `._*` AppleDouble sidecars into th
 tree, and Tauri's build script chokes parsing them (it can't be built directly
 on exFAT). Two things handle it:
 
-- **Build artifacts live in an APFS disk image on the external drive.**
-  `scripts/glossa-build-image.sh` creates a sparse APFS image
-  (`../glossa-build.sparseimage`, grows up to 80 GB), mounts it at
-  `/Volumes/GlossaBuild`, and points `./target` at it. APFS supports xattrs (so
-  Tauri builds cleanly) and the external drive has the room the internal disk
-  doesn't. Disk images don't auto-mount, so **run this once per login session
-  before building**:
+- **Build artifacts live in a shared APFS disk image on the external drive.**
+  One image (`cs_projects/build.sparseimage`) mounts at `/Volumes/Build` and
+  holds the build cache for every project on the drive; this repo's `./target`
+  symlinks to `/Volumes/Build/glossa`. APFS supports xattrs (so Tauri builds
+  cleanly) and the external drive has the room the internal disk doesn't. Disk
+  images don't auto-mount, so **run this once per login session before building**
+  (the `mount-build` script is on your PATH at `~/.local/bin`):
   ```bash
-  ./scripts/glossa-build-image.sh
+  mount-build
   ```
-  Unmount with `hdiutil detach /Volumes/GlossaBuild`. If your repo is already on
-  an APFS/HFS+ volume, skip all this and let Cargo use a normal `./target`.
+  Unmount with `hdiutil detach /Volumes/Build`. If your repo is already on an
+  APFS/HFS+ volume, skip all this and let Cargo use a normal `./target`.
 - The Tauri `beforeDev/BuildCommand` runs `dot_clean` first to strip sidecars
   from the source tree (e.g. `capabilities/`).
 
