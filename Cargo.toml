@@ -13,7 +13,7 @@ members = [
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.80"
 
@@ -29,13 +29,14 @@ glossa-service = { path = "crates/glossa-service" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1.23.4", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-thiserror = "2"
-anyhow = "1"
+thiserror = "2.0.18"
+anyhow = "1.0.102"
 async-trait = "0.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "fs", "time"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
+rand = "0.10.1"
 tracing = "0.1"
 
 [profile.release]

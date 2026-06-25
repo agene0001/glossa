@@ -43,7 +43,18 @@ export const api = {
 	availableLanguages: () => invoke('available_languages'),
 
 	/** Switch the active target language (e.g. "fr"). */
-	setTargetLanguage: (code) => invoke('set_target_language', { code })
+	setTargetLanguage: (code) => invoke('set_target_language', { code }),
+
+	// --- review / spaced-repetition quiz ---
+
+	/** A spaced-repetition review session (weakest words first). */
+	reviewSession: (limit = 12) => invoke('review_session', { limit }),
+
+	/** Record a quiz answer for a word. */
+	recordExercise: (lexemeId, correct) => invoke('record_exercise', { lexemeId, correct }),
+
+	/** How many learned words are available to review. */
+	reviewableCount: () => invoke('reviewable_count')
 };
 
 /** True when running inside the Tauri webview (vs. a plain browser tab). */

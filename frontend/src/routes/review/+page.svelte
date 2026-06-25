@@ -1,8 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { api } from '$lib/api.js';
 
 	let ov = $state(null);
+	let reviewCount = $state(0);
 	let error = $state('');
 	let busy = $state(false);
 
@@ -12,6 +14,11 @@
 			ov = await api.graphOverview();
 		} catch (e) {
 			error = String(e);
+		}
+		try {
+			reviewCount = await api.reviewableCount();
+		} catch {
+			/* ignore */
 		}
 	}
 
@@ -59,6 +66,16 @@
 			{ov.grammar_unknown} unseen
 		</p>
 	</div>
+
+	{#if reviewCount > 0}
+		<div class="card review-cta">
+			<div>
+				<strong>{reviewCount}</strong> word{reviewCount === 1 ? '' : 's'} ready to review
+				<div class="muted">Test yourself with a quick quiz — weakest words first.</div>
+			</div>
+			<button class="primary" onclick={() => goto('/quiz')}>Start review →</button>
+		</div>
+	{/if}
 
 	<div class="card" style="margin-top: 1.4rem;">
 		<div class="row" style="justify-content: space-between;">

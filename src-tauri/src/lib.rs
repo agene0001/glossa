@@ -183,6 +183,37 @@ async fn next_content_for_unit(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn review_session(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<service::ReviewItem>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::review_session(store.as_ref(), &cfg, learner, limit.unwrap_or(12))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn record_exercise(
+    state: State<'_, AppState>,
+    lexeme_id: i64,
+    correct: bool,
+) -> Result<service::ExerciseResult, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::record_exercise(store.as_ref(), &cfg, learner, lexeme_id, correct)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reviewable_count(state: State<'_, AppState>) -> Result<usize, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::reviewable_count(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -233,6 +264,9 @@ pub fn run() {
             next_content_for_unit,
             available_languages,
             set_target_language,
+            review_session,
+            record_exercise,
+            reviewable_count,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Glossa");

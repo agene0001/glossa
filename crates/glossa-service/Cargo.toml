@@ -13,6 +13,7 @@ glossa-storage.workspace = true
 serde.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+rand.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

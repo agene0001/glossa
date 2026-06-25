@@ -292,6 +292,14 @@ button.link:hover {
 	font-size: 0.85rem;
 }
 
+.review-cta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-top: 1.4rem;
+}
+
 /* unit lesson */
 .lesson-examples {
 	display: flex;

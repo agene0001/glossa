@@ -16,7 +16,11 @@ use glossa_core::{
     ContentRequest, ContentResponse, LanguageCode, LearnerId, LearnerProfile, Lexeme, LexemeId,
     LexemeState, MasteryState, PartOfSpeech, Token, TokenStatus, Unit, WordInfo,
 };
-use glossa_graph::mastery::{apply_grammar_exposure, apply_lexeme_exposure, effective_mastery};
+use glossa_graph::mastery::{
+    apply_grammar_exposure, apply_lexeme_exercise, apply_lexeme_exposure, effective_mastery,
+};
+use rand::seq::SliceRandom;
+use rand::Rng;
 use glossa_graph::select::{next_best_content, overview};
 use glossa_graph::{GraphConfig, GraphOverview};
 use glossa_storage::{Store, StoredStory};
@@ -769,6 +773,169 @@ pub async fn next_content_for_unit(
     .await
 }
 
+// --- review / spaced-repetition quiz -------------------------------------
+
+/// A single multiple-choice question: show the word, pick its meaning.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReviewItem {
+    pub lexeme_id: i64,
+    pub prompt: String,
+    pub pos: PartOfSpeech,
+    pub options: Vec<String>,
+    pub answer_index: usize,
+}
+
+/// Result of answering one review question.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExerciseResult {
+    pub status: TokenStatus,
+    pub streak: u32,
+}
+
+/// How many learned words are available to review (for a badge/CTA).
+pub async fn reviewable_count(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<usize> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let lexemes = store.lexemes(&profile.target_language).await?;
+    let has_gloss: HashMap<LexemeId, bool> =
+        lexemes.iter().map(|l| (l.id, l.gloss.is_some())).collect();
+    let now = Utc::now();
+    let n = store
+        .lexeme_states(learner_id)
+        .await?
+        .iter()
+        .filter(|s| {
+            has_gloss.get(&s.lexeme_id).copied().unwrap_or(false)
+                && !effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery).is_unknown()
+        })
+        .count();
+    Ok(n)
+}
+
+/// Build a spaced-repetition review session: the learner's already-met words,
+/// **weakest first** so the decay model drives the schedule (words you haven't
+/// seen in a while have decayed and surface first). Each item is a
+/// multiple-choice question (word → meaning) with distractor glosses.
+pub async fn review_session(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    limit: usize,
+) -> Result<Vec<ReviewItem>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let lexemes = store.lexemes(&language).await?;
+    let states = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+
+    let mut candidates: Vec<(&Lexeme, f32)> = states
+        .iter()
+        .filter_map(|s| {
+            let lex = lex_by_id.get(&s.lexeme_id)?;
+            lex.gloss.as_ref()?; // can only quiz words that have a meaning
+            let eff = effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery);
+            if eff.is_unknown() {
+                return None;
+            }
+            Some((*lex, eff.confidence()))
+        })
+        .collect();
+    candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.truncate(limit);
+
+    let glossed: Vec<&Lexeme> = lexemes.iter().filter(|l| l.gloss.is_some()).collect();
+    let mut rng = rand::rng();
+    let items = candidates
+        .into_iter()
+        .map(|(lex, _)| build_review_item(lex, &glossed, &mut rng))
+        .collect();
+    Ok(items)
+}
+
+fn build_review_item(target: &Lexeme, glossed: &[&Lexeme], rng: &mut impl Rng) -> ReviewItem {
+    let correct = target.gloss.clone().unwrap_or_default();
+
+    let mut pool: Vec<&Lexeme> = glossed
+        .iter()
+        .copied()
+        .filter(|l| l.id != target.id)
+        .collect();
+    pool.shuffle(rng);
+
+    let mut options: Vec<String> = Vec::new();
+    for l in pool {
+        if let Some(g) = &l.gloss {
+            if g != &correct && !options.contains(g) {
+                options.push(g.clone());
+                if options.len() == 3 {
+                    break;
+                }
+            }
+        }
+    }
+    options.push(correct.clone());
+    options.shuffle(rng);
+    let answer_index = options.iter().position(|o| o == &correct).unwrap_or(0);
+
+    ReviewItem {
+        lexeme_id: target.id.0,
+        prompt: target.lemma.clone(),
+        pos: target.pos,
+        options,
+        answer_index,
+    }
+}
+
+/// Record a quiz answer: folds an exercise result into mastery (correct boosts,
+/// incorrect penalizes — spec §5 `ExerciseAnswered`) and logs the event.
+pub async fn record_exercise(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    lexeme_id: i64,
+    correct: bool,
+) -> Result<ExerciseResult> {
+    let id = LexemeId(lexeme_id);
+    let now = Utc::now();
+    let current = store
+        .lexeme_states(learner_id)
+        .await?
+        .into_iter()
+        .find(|s| s.lexeme_id == id)
+        .unwrap_or_else(|| LexemeState::unseen(id));
+    let updated = apply_lexeme_exercise(current, correct, now, &cfg.mastery);
+    store.upsert_lexeme_states(learner_id, &[updated.clone()]).await?;
+    store
+        .append_event(
+            learner_id,
+            &glossa_core::LearningEvent::ExerciseAnswered {
+                lexeme_id: id,
+                correct,
+            },
+        )
+        .await?;
+
+    let streak = compute_streak(&store.activity_dates(learner_id).await?, now);
+    let status = mastery_to_token(effective_mastery(
+        updated.mastery,
+        updated.last_seen_at,
+        now,
+        &cfg.mastery,
+    ));
+    Ok(ExerciseResult { status, streak })
+}
+
 fn mastery_to_token(m: MasteryState) -> TokenStatus {
     match m {
         MasteryState::Known => TokenStatus::Known,
@@ -957,5 +1124,44 @@ mod tests {
         }
         let rm2 = roadmap(&store, &cfg, learner.id).await.unwrap();
         assert_eq!(rm2[0].state, UnitState::Done, "got {:?}", rm2[0]);
+    }
+
+    #[tokio::test]
+    async fn review_session_quizzes_known_words_only() {
+        let store = FileStore::ephemeral().unwrap();
+        store
+            .upsert_lexemes(&[
+                lex(1, "yo", 1),
+                lex(2, "comer", 2),
+                lex(3, "pizza", 3),
+                lex(4, "agua", 4),
+                lex(5, "casa", 5),
+            ])
+            .await
+            .unwrap();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+        let cfg = GraphConfig::default();
+
+        // Nothing learned yet → nothing to review.
+        assert!(review_session(&store, &cfg, learner.id, 10)
+            .await
+            .unwrap()
+            .is_empty());
+
+        set_lexeme_status(&store, learner.id, LexemeId(1), MasteryState::Known)
+            .await
+            .unwrap();
+        let items = review_session(&store, &cfg, learner.id, 10).await.unwrap();
+        assert_eq!(items.len(), 1);
+        let it = &items[0];
+        assert_eq!(it.prompt, "yo");
+        assert_eq!(it.options[it.answer_index], "yo-en");
+        assert!(it.options.len() >= 2 && it.options.len() <= 4);
+
+        record_exercise(&store, &cfg, learner.id, 1, true)
+            .await
+            .unwrap();
     }
 }

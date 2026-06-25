@@ -22,6 +22,7 @@
 
 	const links = [
 		{ href: '/', label: 'Learn' },
+		{ href: '/quiz', label: 'Quiz' },
 		{ href: '/review', label: 'Review' },
 		{ href: '/chat', label: 'Chat', tag: 'Phase 2' },
 		{ href: '/stats', label: 'Stats', tag: 'soon' }
