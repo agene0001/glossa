@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/glossa-core",
+    "crates/glossa-lemma",
     "crates/glossa-graph",
     "crates/glossa-content",
     "crates/glossa-conversation",
@@ -20,6 +21,7 @@ rust-version = "1.80"
 # Shared dependency versions live here so every crate stays on the same line.
 [workspace.dependencies]
 glossa-core = { path = "crates/glossa-core" }
+glossa-lemma = { path = "crates/glossa-lemma" }
 glossa-graph = { path = "crates/glossa-graph" }
 glossa-content = { path = "crates/glossa-content" }
 glossa-conversation = { path = "crates/glossa-conversation" }

@@ -1,0 +1,9 @@
+[package]
+name = "glossa-lemma"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Lightweight surface-form → lemma resolution (regular morphology + curated irregulars). Pure, no I/O."
+
+[dependencies]
+glossa-core.workspace = true

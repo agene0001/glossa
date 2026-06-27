@@ -1252,6 +1252,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "glossa-lemma"
+version = "0.1.0"
+dependencies = [
+ "glossa-core",
+]
+
+[[package]]
 name = "glossa-service"
 version = "0.1.0"
 dependencies = [
@@ -1259,6 +1266,7 @@ dependencies = [
  "glossa-content",
  "glossa-core",
  "glossa-graph",
+ "glossa-lemma",
  "glossa-storage",
  "rand 0.10.1",
  "serde",

@@ -116,17 +116,16 @@ async fn generate_from_request(
 
     let generated = generator.generate(&request).await?;
 
-    // --- resolve lemmas → ids, build display tokens -------------------------
+    // --- resolve surface forms → ids, build display tokens -----------------
     let lex_by_lemma: HashMap<String, &Lexeme> = lexemes
         .iter()
         .map(|l| (l.lemma.to_lowercase(), l))
         .collect();
-    let lemma_to_id: HashMap<String, LexemeId> =
-        lex_by_lemma.iter().map(|(k, l)| (k.clone(), l.id)).collect();
-    let lemma_gloss: HashMap<String, Option<String>> = lex_by_lemma
-        .iter()
-        .map(|(k, l)| (k.clone(), l.gloss.clone()))
-        .collect();
+    // Index that resolves inflected forms (conjugations, plurals) to a lexeme,
+    // plus meaning looked up by id.
+    let form_index = glossa_lemma::build_form_index(lexemes);
+    let id_gloss: HashMap<LexemeId, Option<String>> =
+        lexemes.iter().map(|l| (l.id, l.gloss.clone())).collect();
 
     // Effective (decayed) status per lexeme the learner has state for.
     let id_status: HashMap<LexemeId, TokenStatus> = lexeme_states
@@ -137,24 +136,21 @@ async fn generate_from_request(
         })
         .collect();
 
-    let new_set: HashSet<String> = generated
-        .new_words_introduced
-        .iter()
-        .map(|w| w.to_lowercase())
-        .collect();
-
-    let (tokens, known_ratio) =
-        tokenize(&generated.text, &new_set, &lemma_to_id, &id_status, &lemma_gloss);
-
-    // Words used/introduced, resolved to ids for the event-driven mastery model.
+    // Lemmas the model reports are in the form index too, so resolve through it.
     let resolve = |lemmas: &[String]| -> Vec<LexemeId> {
         lemmas
             .iter()
-            .filter_map(|w| lemma_to_id.get(&w.to_lowercase()).copied())
+            .filter_map(|w| form_index.get(&w.to_lowercase()).copied())
             .collect()
     };
-    let mut all_ids = resolve(&generated.known_words_used);
     let new_ids = resolve(&generated.new_words_introduced);
+    let new_id_set: HashSet<LexemeId> = new_ids.iter().copied().collect();
+
+    let (tokens, known_ratio) =
+        tokenize(&generated.text, &new_id_set, &form_index, &id_status, &id_gloss);
+
+    // Words used/introduced, resolved to ids for the event-driven mastery model.
+    let mut all_ids = resolve(&generated.known_words_used);
     all_ids.extend(new_ids.iter().copied());
     all_ids.sort();
     all_ids.dedup();
@@ -490,14 +486,9 @@ pub async fn unit_lesson(
     let now = Utc::now();
 
     let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
-    let lemma_to_id: HashMap<String, LexemeId> = lexemes
-        .iter()
-        .map(|l| (l.lemma.to_lowercase(), l.id))
-        .collect();
-    let lemma_gloss: HashMap<String, Option<String>> = lexemes
-        .iter()
-        .map(|l| (l.lemma.to_lowercase(), l.gloss.clone()))
-        .collect();
+    let form_index = glossa_lemma::build_form_index(&lexemes);
+    let id_gloss: HashMap<LexemeId, Option<String>> =
+        lexemes.iter().map(|l| (l.id, l.gloss.clone())).collect();
     let id_status: HashMap<LexemeId, TokenStatus> = states_vec
         .iter()
         .map(|s| {
@@ -506,12 +497,12 @@ pub async fn unit_lesson(
         })
         .collect();
 
-    // A unit target word counts as "new" for highlighting if still unknown.
-    let new_set: HashSet<String> = unit
+    // A unit target word counts as "new" for highlighting while still unknown.
+    let new_id_set: HashSet<LexemeId> = unit
         .target_lexemes
         .iter()
+        .copied()
         .filter(|id| id_status.get(id).copied().unwrap_or(TokenStatus::Unknown) == TokenStatus::Unknown)
-        .filter_map(|id| lex_by_id.get(id).map(|l| l.lemma.to_lowercase()))
         .collect();
 
     let examples = unit
@@ -519,7 +510,7 @@ pub async fn unit_lesson(
         .iter()
         .map(|ex| {
             let (tokens, _) =
-                tokenize(&ex.text, &new_set, &lemma_to_id, &id_status, &lemma_gloss);
+                tokenize(&ex.text, &new_id_set, &form_index, &id_status, &id_gloss);
             LessonExample {
                 tokens,
                 translation: ex.translation.clone(),
@@ -947,14 +938,14 @@ fn mastery_to_token(m: MasteryState) -> TokenStatus {
 /// Split text into renderable tokens, tagging each word by the learner's status,
 /// and return the measured fraction of word-tokens that are Known or Partial.
 ///
-/// V1 matches surface forms to lemmas by lowercasing only — inflected forms
-/// won't match the flat lemma table (acceptable per spec §11.5).
+/// Surface forms are resolved to a lexeme via `form_index` (from `glossa-lemma`),
+/// so conjugations and plurals match their base word.
 fn tokenize(
     text: &str,
-    new_lemmas: &HashSet<String>,
-    lemma_to_id: &HashMap<String, LexemeId>,
+    new_ids: &HashSet<LexemeId>,
+    form_index: &HashMap<String, LexemeId>,
     id_status: &HashMap<LexemeId, TokenStatus>,
-    lemma_gloss: &HashMap<String, Option<String>>,
+    id_gloss: &HashMap<LexemeId, Option<String>>,
 ) -> (Vec<Token>, f32) {
     // Group consecutive chars by alphabetic-ness so punctuation/whitespace is
     // preserved verbatim as non-word tokens.
@@ -984,18 +975,16 @@ fn tokenize(
         }
         word_count += 1;
         let norm = text.to_lowercase();
-        let (status, lexeme_id) = if new_lemmas.contains(&norm) {
-            (TokenStatus::New, lemma_to_id.get(&norm).copied())
-        } else if let Some(id) = lemma_to_id.get(&norm) {
-            let st = id_status.get(id).copied().unwrap_or(TokenStatus::Unknown);
-            (st, Some(*id))
-        } else {
-            (TokenStatus::Unknown, None)
+        let lexeme_id = form_index.get(&norm).copied();
+        let status = match lexeme_id {
+            Some(id) if new_ids.contains(&id) => TokenStatus::New,
+            Some(id) => id_status.get(&id).copied().unwrap_or(TokenStatus::Unknown),
+            None => TokenStatus::Unknown,
         };
         if matches!(status, TokenStatus::Known | TokenStatus::Partial) {
             known_like += 1;
         }
-        let gloss = lemma_gloss.get(&norm).cloned().flatten();
+        let gloss = lexeme_id.and_then(|id| id_gloss.get(&id).cloned().flatten());
         tokens.push(Token {
             text,
             is_word: true,
