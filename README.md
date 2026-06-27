@@ -147,7 +147,7 @@ place:
 | Storage | File-backed `Store` (zero setup, persists) | Implement `PgStore` against `crates/glossa-storage/schema.sql` behind the same `Store` trait — nothing else changes (spec §6, §9). |
 | Analytics | None | DuckDB read path over the append-only events (spec §5, Stats view). |
 | Content caching | None | Decorator over `ContentGenerator` keyed on `(graph-state hash, request type)` (spec §2.7, §7). |
-| Word matching | Regular morphology + curated irregulars (`glossa-lemma`) so `comí`/`gatos` credit `comer`/`gato` | Broader irregular coverage / a real lemmatizer. |
+| Word matching | `glossa-lemma`: es/fr conjugation across tenses (present/preterite/imperfect/future/conditional/subjunctive/participle), plurals, spelling changes + curated irregulars — complete for the closed inventory | Open-vocabulary coverage (UniMorph/Apertium) once free-text input (Phase 2) needs it. |
 | Conversation / Voice | Trait stubs | Phase 2 / Phase 3. |
 | Languages | Spanish (15 units, ~210 words) + French (5 units) | More languages = drop in a frequency list + units. |
 

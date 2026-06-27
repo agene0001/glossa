@@ -1,16 +1,18 @@
 //! `glossa-lemma` — resolve inflected surface forms back to their lexeme.
 //!
 //! V1 vocabulary is stored flat (one entry per lemma), but real text contains
-//! conjugated verbs and plurals — `como`/`comió` for `comer`, `mange` for
+//! conjugated verbs and plurals — `comí`/`comería` for `comer`, `mange` for
 //! `manger`, `gatos` for `gato`. Without this, those show as "unknown" even
 //! when the learner knows the base word, which corrupts both highlighting and
 //! the mastery graph.
 //!
-//! Approach (deliberately lightweight, no NLP dependency): generate the common
-//! surface forms for each seeded lexeme — regular Spanish/French conjugation and
-//! plural rules, plus a curated table for the high-frequency irregular verbs —
-//! and build a `surface form → LexemeId` index. Missing a form just falls back
-//! to "unknown" (same as today), so this is strictly an improvement.
+//! Because the inventory is a **closed list**, we don't need a general
+//! lemmatizer — only complete inflection of the lemmas we actually have. So we
+//! generate the surface forms for each seeded lexeme (regular Spanish/French
+//! conjugation across the common tenses + plural rules, plus a curated table
+//! for high-frequency irregulars) and build a `surface form → LexemeId` index.
+//! Pure, no external data, fully offline; a missing form just falls back to
+//! "unknown" (same as before), so this is strictly an improvement.
 
 use std::collections::HashMap;
 
@@ -27,7 +29,6 @@ pub fn build_form_index(lexemes: &[Lexeme]) -> HashMap<String, LexemeId> {
             map.entry(form).or_insert(lex.id);
         }
     }
-    // Real lemmas win over any generated collision.
     for lex in lexemes {
         map.insert(lex.lemma.to_lowercase(), lex.id);
     }
@@ -68,57 +69,84 @@ fn spanish_forms(lemma: &str, pos: PartOfSpeech, forms: &mut Vec<String>) {
             forms.extend(extra.iter().map(|s| s.to_string()));
             return; // curated forms cover irregulars; skip regular generation
         }
+        // future + conditional are formed on the full infinitive (hablar → hablaré, hablaría).
+        let fut_cond = &["é", "ás", "á", "emos", "éis", "án", "ía", "ías", "íamos", "íais", "ían"];
         if let Some(stem) = lemma.strip_suffix("ar") {
             add(forms, stem, &[
                 "o", "as", "a", "amos", "áis", "an", // present
-                "é", "aste", "ó", "amos", "asteis", "aron", // preterite
-                "aba", "abas", "ábamos", "aban", // imperfect
+                "é", "aste", "ó", "asteis", "aron", // preterite (amos shared with present)
+                "aba", "abas", "ábamos", "abais", "aban", // imperfect
+                "e", "es", "emos", "en", // present subjunctive
                 "ando", "ado", "ada", "ados", "adas", // gerund / participle
             ]);
-        } else if let Some(stem) = lemma.strip_suffix("er").or_else(|| lemma.strip_suffix("ir")) {
+            add(forms, lemma, fut_cond);
+            // -car / -gar / -zar spelling changes (busqué, llegué, empecé, + subjunctive).
+            if let Some(b) = lemma.strip_suffix("car") {
+                add(forms, b, &["qué", "que", "ques", "quemos", "quen"]);
+            } else if let Some(b) = lemma.strip_suffix("gar") {
+                add(forms, b, &["gué", "gue", "gues", "guemos", "guen"]);
+            } else if let Some(b) = lemma.strip_suffix("zar") {
+                add(forms, b, &["cé", "ce", "ces", "cemos", "cen"]);
+            }
+        } else if let Some(stem) = lemma.strip_suffix("er") {
             add(forms, stem, &[
-                "o", "es", "e", "emos", "en", "imos", // present (-er/-ir)
-                "í", "iste", "ió", "ieron", "isteis", // preterite
-                "ía", "ías", "íamos", "ían", // imperfect
+                "o", "es", "e", "emos", "éis", "en", // present
+                "í", "iste", "ió", "imos", "isteis", "ieron", // preterite
+                "ía", "ías", "íamos", "íais", "ían", // imperfect
+                "a", "as", "amos", "áis", "an", // present subjunctive
                 "iendo", "ido", "ida", "idos", "idas", // gerund / participle
             ]);
+            add(forms, lemma, fut_cond);
+        } else if let Some(stem) = lemma.strip_suffix("ir") {
+            add(forms, stem, &[
+                "o", "es", "e", "imos", "ís", "en", // present
+                "í", "iste", "ió", "imos", "isteis", "ieron", // preterite
+                "ía", "ías", "íamos", "íais", "ían", // imperfect
+                "a", "as", "amos", "áis", "an", // present subjunctive
+                "iendo", "ido", "ida", "idos", "idas", // gerund / participle
+            ]);
+            add(forms, lemma, fut_cond);
         }
     } else if matches!(pos, PartOfSpeech::Noun | PartOfSpeech::Adjective) {
-        if ends_with_vowel(lemma) {
+        if let Some(base) = lemma.strip_suffix('z') {
+            forms.push(format!("{base}ces")); // vez → veces, feliz → felices
+        } else if ends_with_vowel(lemma) {
             forms.push(format!("{lemma}s"));
         } else {
             forms.push(format!("{lemma}es"));
         }
         if pos == PartOfSpeech::Adjective {
             if let Some(base) = lemma.strip_suffix('o') {
-                add(forms, base, &["a", "os", "as"]); // gender/number agreement
+                add(forms, base, &["a", "os", "as"]); // gender / number agreement
             }
         }
     }
 }
 
-/// Curated present + common past forms for high-frequency irregular Spanish verbs.
+/// Curated forms (present + preterite + common subjunctive/future/imperfect)
+/// for high-frequency irregular Spanish verbs.
 fn spanish_irregular(lemma: &str) -> Option<&'static [&'static str]> {
     let forms: &[&str] = match lemma {
-        "ser" => &["soy", "eres", "es", "somos", "son", "fui", "fuiste", "fue", "fueron", "era", "eran"],
-        "estar" => &["estoy", "estás", "está", "estamos", "están", "estaba", "estuvo"],
-        "ir" => &["voy", "vas", "va", "vamos", "van", "fui", "fue", "fueron", "iba", "iban"],
-        "haber" => &["he", "has", "ha", "hemos", "han", "hay", "había"],
-        "tener" => &["tengo", "tienes", "tiene", "tenemos", "tienen", "tuve", "tuvo"],
-        "hacer" => &["hago", "haces", "hace", "hacemos", "hacen", "hice", "hizo"],
-        "poder" => &["puedo", "puedes", "puede", "podemos", "pueden", "pude", "pudo"],
-        "querer" => &["quiero", "quieres", "quiere", "queremos", "quieren", "quise", "quiso"],
-        "decir" => &["digo", "dices", "dice", "decimos", "dicen", "dije", "dijo"],
-        "ver" => &["veo", "ves", "ve", "vemos", "ven", "vi", "vio"],
-        "dar" => &["doy", "das", "da", "damos", "dan", "di", "dio"],
-        "saber" => &["sé", "sabes", "sabe", "sabemos", "saben", "supe", "supo"],
-        "venir" => &["vengo", "vienes", "viene", "venimos", "vienen", "vine", "vino"],
-        "poner" => &["pongo", "pones", "pone", "ponemos", "ponen", "puse", "puso"],
-        "salir" => &["salgo", "sales", "sale", "salimos", "salen", "salí"],
-        "pensar" => &["pienso", "piensas", "piensa", "pensamos", "piensan", "pensé"],
-        "volver" => &["vuelvo", "vuelves", "vuelve", "volvemos", "vuelven", "volví"],
-        "encontrar" => &["encuentro", "encuentras", "encuentra", "encontramos", "encuentran"],
-        "seguir" => &["sigo", "sigues", "sigue", "seguimos", "siguen"],
+        "ser" => &["soy", "eres", "es", "somos", "son", "fui", "fuiste", "fue", "fueron", "era", "eras", "éramos", "eran", "sea", "sean", "seré", "sería"],
+        "estar" => &["estoy", "estás", "está", "estamos", "están", "estaba", "estaban", "estuve", "estuvo", "esté", "estén", "estaré"],
+        "ir" => &["voy", "vas", "va", "vamos", "van", "fui", "fue", "fueron", "iba", "ibas", "íbamos", "iban", "vaya", "vayan", "iré", "iría"],
+        "haber" => &["he", "has", "ha", "hemos", "han", "hay", "había", "habían", "haya", "habrá"],
+        "tener" => &["tengo", "tienes", "tiene", "tenemos", "tienen", "tuve", "tuvo", "tenía", "tenían", "tenga", "tendré", "tendría"],
+        "hacer" => &["hago", "haces", "hace", "hacemos", "hacen", "hice", "hizo", "hacía", "haga", "haré", "haría", "hecho"],
+        "poder" => &["puedo", "puedes", "puede", "podemos", "pueden", "pude", "pudo", "podía", "pueda", "podré", "podría"],
+        "querer" => &["quiero", "quieres", "quiere", "queremos", "quieren", "quise", "quiso", "quería", "quiera", "querré", "querría"],
+        "decir" => &["digo", "dices", "dice", "decimos", "dicen", "dije", "dijo", "decía", "diga", "diré", "dicho"],
+        "ver" => &["veo", "ves", "ve", "vemos", "ven", "vi", "vio", "veía", "veían", "vea", "veré", "visto"],
+        "dar" => &["doy", "das", "da", "damos", "dan", "di", "dio", "daba", "dé", "daré"],
+        "saber" => &["sé", "sabes", "sabe", "sabemos", "saben", "supe", "supo", "sabía", "sepa", "sabré"],
+        "venir" => &["vengo", "vienes", "viene", "venimos", "vienen", "vine", "vino", "venía", "venga", "vendré"],
+        "poner" => &["pongo", "pones", "pone", "ponemos", "ponen", "puse", "puso", "ponía", "ponga", "pondré", "puesto"],
+        "salir" => &["salgo", "sales", "sale", "salimos", "salen", "salí", "salía", "salga", "saldré"],
+        "pensar" => &["pienso", "piensas", "piensa", "pensamos", "piensan", "pensé", "pensaba", "piense"],
+        "volver" => &["vuelvo", "vuelves", "vuelve", "volvemos", "vuelven", "volví", "volvía", "vuelva", "vuelto"],
+        "encontrar" => &["encuentro", "encuentras", "encuentra", "encontramos", "encuentran", "encontré", "encuentre"],
+        "seguir" => &["sigo", "sigues", "sigue", "seguimos", "siguen", "seguí", "siguió", "siga"],
+        "entender" => &["entiendo", "entiendes", "entiende", "entendemos", "entienden", "entendí", "entendía", "entienda"],
         _ => return None,
     };
     Some(forms)
@@ -134,13 +162,24 @@ fn french_forms(lemma: &str, pos: PartOfSpeech, forms: &mut Vec<String>) {
         }
         if let Some(stem) = lemma.strip_suffix("er") {
             add(forms, stem, &[
-                "e", "es", "e", "ons", "ez", "ent", // present
+                "e", "es", "e", "ons", "ez", "ent", // present (+ pres. subjunctive overlap)
+                "ais", "ait", "ions", "iez", "aient", // imperfect
                 "é", "ée", "és", "ées", // past participle
-                "ais", "ait", "aient", // imperfect
+                "ant", // present participle
             ]);
+            // future + conditional on the infinitive (parler → parlerai, parlerais).
+            add(forms, lemma, &["ai", "as", "a", "ons", "ez", "ont", "ais", "ait", "ions", "iez", "aient"]);
+            // -ger/-cer keep a soft g/c before a/o: mangeons, mangeait; commençait.
+            if let Some(b) = lemma.strip_suffix("r") {
+                if b.ends_with("ge") {
+                    add(forms, b, &["ons", "ais", "ait", "aient", "ant"]);
+                }
+            }
+            if let Some(b) = lemma.strip_suffix("cer") {
+                add(forms, &format!("{b}ç"), &["ons", "ais", "ait", "aient", "ant"]);
+            }
         }
     } else if matches!(pos, PartOfSpeech::Noun | PartOfSpeech::Adjective) {
-        // Plural: add -s unless it already ends in s/x/z.
         if !matches!(lemma.chars().last(), Some('s' | 'x' | 'z')) {
             forms.push(format!("{lemma}s"));
         }
@@ -154,18 +193,18 @@ fn french_forms(lemma: &str, pos: PartOfSpeech, forms: &mut Vec<String>) {
 /// Curated forms for high-frequency irregular French verbs.
 fn french_irregular(lemma: &str) -> Option<&'static [&'static str]> {
     let forms: &[&str] = match lemma {
-        "être" => &["suis", "es", "est", "sommes", "êtes", "sont", "été", "était"],
-        "avoir" => &["ai", "as", "a", "avons", "avez", "ont", "eu", "avait"],
-        "aller" => &["vais", "vas", "va", "allons", "allez", "vont", "allé", "allée"],
-        "faire" => &["fais", "fait", "faisons", "faites", "font", "faisait"],
-        "vouloir" => &["veux", "veut", "voulons", "voulez", "veulent", "voulu"],
-        "pouvoir" => &["peux", "peut", "pouvons", "pouvez", "peuvent", "pu"],
-        "boire" => &["bois", "boit", "buvons", "buvez", "boivent", "bu"],
-        "voir" => &["vois", "voit", "voyons", "voyez", "voient", "vu"],
-        "venir" => &["viens", "vient", "venons", "venez", "viennent", "venu"],
-        "dire" => &["dis", "dit", "disons", "dites", "disent"],
-        "lire" => &["lis", "lit", "lisons", "lisez", "lisent", "lu"],
-        "savoir" => &["sais", "sait", "savons", "savez", "savent", "su"],
+        "être" => &["suis", "es", "est", "sommes", "êtes", "sont", "étais", "était", "étaient", "été", "sera", "serait", "soit"],
+        "avoir" => &["ai", "as", "a", "avons", "avez", "ont", "avais", "avait", "avaient", "eu", "aura", "aurait", "ait"],
+        "aller" => &["vais", "vas", "va", "allons", "allez", "vont", "allais", "allait", "allé", "allée", "irai", "ira", "iront", "irait"],
+        "faire" => &["fais", "fait", "faisons", "faites", "font", "faisais", "faisait", "fait", "fera", "ferait", "fasse"],
+        "vouloir" => &["veux", "veut", "voulons", "voulez", "veulent", "voulais", "voulait", "voulu", "voudrais", "voudrait"],
+        "pouvoir" => &["peux", "peut", "pouvons", "pouvez", "peuvent", "pouvais", "pouvait", "pu", "pourrait"],
+        "boire" => &["bois", "boit", "buvons", "buvez", "boivent", "buvais", "bu"],
+        "voir" => &["vois", "voit", "voyons", "voyez", "voient", "voyais", "vu", "verra"],
+        "venir" => &["viens", "vient", "venons", "venez", "viennent", "venais", "venu", "viendra"],
+        "dire" => &["dis", "dit", "disons", "dites", "disent", "disais", "dit"],
+        "lire" => &["lis", "lit", "lisons", "lisez", "lisent", "lisais", "lu"],
+        "savoir" => &["sais", "sait", "savons", "savez", "savent", "savais", "su", "saura"],
         _ => return None,
     };
     Some(forms)
@@ -188,36 +227,53 @@ mod tests {
     }
 
     #[test]
-    fn spanish_conjugations_and_plurals_resolve() {
+    fn spanish_tenses_resolve() {
         let lexemes = vec![
             lex(1, "es", "comer", PartOfSpeech::Verb),
             lex(2, "es", "ser", PartOfSpeech::Verb),
             lex(3, "es", "hablar", PartOfSpeech::Verb),
-            lex(4, "es", "gato", PartOfSpeech::Noun),
+            lex(4, "es", "buscar", PartOfSpeech::Verb),
+            lex(5, "es", "gato", PartOfSpeech::Noun),
+            lex(6, "es", "vez", PartOfSpeech::Noun),
         ];
         let idx = build_form_index(&lexemes);
-        assert_eq!(idx.get("como"), Some(&LexemeId(1))); // comer
-        assert_eq!(idx.get("comió"), Some(&LexemeId(1)));
-        assert_eq!(idx.get("soy"), Some(&LexemeId(2))); // ser (irregular)
-        assert_eq!(idx.get("es"), Some(&LexemeId(2)));
-        assert_eq!(idx.get("hablo"), Some(&LexemeId(3))); // hablar
-        assert_eq!(idx.get("hablé"), Some(&LexemeId(3)));
-        assert_eq!(idx.get("gatos"), Some(&LexemeId(4))); // plural
-        assert_eq!(idx.get("gato"), Some(&LexemeId(4))); // lemma itself
+        let hit = |w: &str| idx.get(w).copied();
+        // comer: present / preterite / imperfect / future / conditional / participle
+        for w in ["como", "comió", "comía", "comeré", "comería", "comido"] {
+            assert_eq!(hit(w), Some(LexemeId(1)), "{w}");
+        }
+        // ser irregular present + past
+        for w in ["soy", "es", "fue", "era", "sería"] {
+            assert_eq!(hit(w), Some(LexemeId(2)), "{w}");
+        }
+        // hablar future/imperfect/subjunctive
+        for w in ["hablo", "hablé", "hablaba", "hablaré", "hable"] {
+            assert_eq!(hit(w), Some(LexemeId(3)), "{w}");
+        }
+        assert_eq!(hit("busqué"), Some(LexemeId(4))); // -car spelling change
+        assert_eq!(hit("gatos"), Some(LexemeId(5)));
+        assert_eq!(hit("veces"), Some(LexemeId(6))); // -z → -ces plural
     }
 
     #[test]
-    fn french_conjugations_resolve() {
+    fn french_tenses_resolve() {
         let lexemes = vec![
             lex(1, "fr", "manger", PartOfSpeech::Verb),
             lex(2, "fr", "être", PartOfSpeech::Verb),
-            lex(3, "fr", "livre", PartOfSpeech::Noun),
+            lex(3, "fr", "aller", PartOfSpeech::Verb),
+            lex(4, "fr", "livre", PartOfSpeech::Noun),
         ];
         let idx = build_form_index(&lexemes);
-        assert_eq!(idx.get("mange"), Some(&LexemeId(1)));
-        assert_eq!(idx.get("manges"), Some(&LexemeId(1)));
-        assert_eq!(idx.get("suis"), Some(&LexemeId(2))); // être
-        assert_eq!(idx.get("est"), Some(&LexemeId(2)));
-        assert_eq!(idx.get("livres"), Some(&LexemeId(3)));
+        let hit = |w: &str| idx.get(w).copied();
+        for w in ["mange", "manges", "mangeait", "mangera", "mangé"] {
+            assert_eq!(hit(w), Some(LexemeId(1)), "{w}");
+        }
+        for w in ["suis", "est", "était", "été"] {
+            assert_eq!(hit(w), Some(LexemeId(2)), "{w}");
+        }
+        for w in ["vais", "va", "irai", "allé"] {
+            assert_eq!(hit(w), Some(LexemeId(3)), "{w}");
+        }
+        assert_eq!(hit("livres"), Some(LexemeId(4)));
     }
 }
