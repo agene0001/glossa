@@ -98,8 +98,8 @@ npm run dev        # launches the desktop app (starts Vite, then Tauri)
 ```
 
 `npm run dev` runs `tauri dev`, which boots the SvelteKit dev server and opens
-the Glossa window. First launch seeds a small Spanish frequency list and creates
-your learner profile automatically.
+the Glossa window. First launch seeds the Spanish and French inventories and
+creates your learner profile automatically.
 
 ### Live content (optional)
 
@@ -147,9 +147,9 @@ place:
 | Storage | File-backed `Store` (zero setup, persists) | Implement `PgStore` against `crates/glossa-storage/schema.sql` behind the same `Store` trait — nothing else changes (spec §6, §9). |
 | Analytics | None | DuckDB read path over the append-only events (spec §5, Stats view). |
 | Content caching | None | Decorator over `ContentGenerator` keyed on `(graph-state hash, request type)` (spec §2.7, §7). |
-| Word matching | Flat lemma, lowercased surface forms | Morphology so `comí`/`comiendo` credit `comer` (spec §11.5). |
+| Word matching | Regular morphology + curated irregulars (`glossa-lemma`) so `comí`/`gatos` credit `comer`/`gato` | Broader irregular coverage / a real lemmatizer. |
 | Conversation / Voice | Trait stubs | Phase 2 / Phase 3. |
-| Languages | Spanish only | The schema is already multi-language; add a frequency list + grammar set. |
+| Languages | Spanish (15 units, ~210 words) + French (5 units) | More languages = drop in a frequency list + units. |
 
 The Postgres schema for the full data model (including the Phase-2 conversation
 tables and a note on Phase-4 matching) is in
