@@ -10,11 +10,33 @@
 	let loading = $state(true);
 	let selected = $state(null);
 	let revealed = $state(new Set());
+	let readRevealed = $state(false);
 	let practice = $state(null);
 	let practiceLoading = $state(false);
 	let practiceRevealed = $state(false);
 	let saving = $state(false);
 	let result = $state(null); // LessonResult → celebration
+	let step = $state(0);
+
+	// The ordered steps of the lesson flow, built from what the unit actually has.
+	const STEP_TITLES = {
+		objective: 'Goal',
+		teach: 'Learn',
+		examples: 'Examples',
+		read: 'Read',
+		practice: 'Practice',
+		check: 'Finish'
+	};
+	let steps = $derived.by(() => {
+		if (!lesson) return [];
+		const s = ['objective', 'teach', 'examples'];
+		if (lesson.reading) s.push('read');
+		if (live) s.push('practice');
+		s.push('check');
+		return s;
+	});
+	let current = $derived(steps[step] ?? null);
+	let isLast = $derived(step >= steps.length - 1);
 
 	async function load() {
 		loading = true;
@@ -30,6 +52,15 @@
 	onMount(load);
 
 	const plain = (tokens) => tokens.map((t) => t.text).join('');
+
+	function next() {
+		selected = null;
+		if (!isLast) step += 1;
+	}
+	function prev() {
+		selected = null;
+		if (step > 0) step -= 1;
+	}
 
 	function pick(t) {
 		if (!t.is_word || t.status == null) return;
@@ -85,6 +116,21 @@
 	{/each}
 {/snippet}
 
+{#snippet meaning()}
+	{#if selected}
+		<div class="meaning">
+			<div>
+				<button class="iconbtn" title="Listen" onclick={() => speak(selected.text, lang)}>🔊</button>
+				<span class="m-word">{selected.text}</span>
+				<span class="m-gloss">{selected.gloss ?? 'no meaning on file'}</span>
+			</div>
+			{#if selected.lexeme_id != null && selected.status !== 'known'}
+				<button onclick={() => markKnown(selected)}>✓ I know this word</button>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 {#if result}
 	<div class="card celebrate">
 		<div class="emoji">🎉</div>
@@ -106,92 +152,279 @@
 		<p class="muted">Loading…</p>
 	{:else if lesson}
 		<div class="page-head" style="margin-top: 0.8rem;">
-			<h1>{lesson.title}</h1>
+			<div class="title-row">
+				<h1>{lesson.title}</h1>
+				{#if lesson.level}<span class="level-badge">{lesson.level}</span>{/if}
+			</div>
 			<p>{lesson.description}</p>
 		</div>
 
-		{#if lesson.grammar_tip}
-			<div class="tip">
-				<span class="tip-label">Grammar tip{#if lesson.grammar} · {lesson.grammar}{/if}</span>
-				<p>{lesson.grammar_tip}</p>
+		<!-- Stepper -->
+		<ol class="stepper">
+			{#each steps as s, i (s)}
+				<li class="stp" class:active={i === step} class:done={i < step}>
+					<span class="stp-num">{i < step ? '✓' : i + 1}</span>
+					<span class="stp-label">{STEP_TITLES[s]}</span>
+				</li>
+			{/each}
+		</ol>
+
+		<!-- 1. Objective -->
+		{#if current === 'objective'}
+			<div class="card">
+				<div class="step-kicker">Lesson goal</div>
+				<h2 class="goal">By the end, you'll be able to…</h2>
+				<p class="objective">🎯 {lesson.objective || lesson.description}</p>
+				<p class="muted">
+					This unit teaches {lesson.words.length} new word{lesson.words.length === 1 ? '' : 's'}{#if lesson.grammar}
+						and one grammar focus ({lesson.grammar}){/if}. You'll see them, read them in
+					context, then check what stuck.
+				</p>
 			</div>
 		{/if}
 
-		<div class="card">
-			<div class="lesson-examples">
-				{#each lesson.examples as ex, i (i)}
-					<div class="ex">
-						<div class="story">{@render tline(ex.tokens)}</div>
-						{#if revealed.has(i)}<div class="ex-tr">{ex.translation}</div>{/if}
-						<div class="ex-actions">
-							<button class="iconbtn" title="Listen" onclick={() => speak(plain(ex.tokens), lang)}>🔊</button>
-							<button class="link" onclick={() => toggleReveal(i)}>
-								{revealed.has(i) ? 'Hide' : 'Show'} translation
-							</button>
-						</div>
-					</div>
-				{/each}
-			</div>
-
-			{#if selected}
-				<div class="meaning">
-					<div>
-						<button class="iconbtn" title="Listen" onclick={() => speak(selected.text, lang)}>🔊</button>
-						<span class="m-word">{selected.text}</span>
-						<span class="m-gloss">{selected.gloss ?? 'no meaning on file'}</span>
-					</div>
-					{#if selected.lexeme_id != null && selected.status !== 'known'}
-						<button onclick={() => markKnown(selected)}>✓ I know this word</button>
-					{/if}
+		<!-- 2. Teach -->
+		{#if current === 'teach'}
+			{#if lesson.grammar_tip}
+				<div class="tip">
+					<span class="tip-label">Grammar{#if lesson.grammar} · {lesson.grammar}{/if}</span>
+					<p>{lesson.grammar_tip}</p>
 				</div>
 			{/if}
-
-			<div class="legend">
-				<span><span class="swatch" style="background: var(--known)"></span>known</span>
-				<span><span class="swatch" style="background: var(--partial)"></span>learning</span>
-				<span><span class="swatch" style="background: var(--new)"></span>new</span>
-				<span class="muted">· tap a word for its meaning, 🔊 to hear it</span>
-			</div>
-
-			<div class="row" style="margin-top: 1.4rem;">
-				<button class="primary" onclick={studied} disabled={saving}>I've studied this ✓</button>
-				{#if live}
-					<button onclick={getPractice} disabled={practiceLoading}>Extra AI practice</button>
-				{/if}
-			</div>
-		</div>
-
-		<div class="card" style="margin-top: 1.2rem;">
-			<div class="nw-label">Words in this unit</div>
-			<div class="vocab">
-				{#each lesson.words as w (w.lexeme_id)}
-					<button
-						class="vchip {w.status}"
-						title="Listen"
-						onclick={() => speak(w.lemma, lang)}>
-						<strong>{w.lemma}</strong>{#if w.gloss} — {w.gloss}{/if} <span class="spk">🔊</span>
-					</button>
-				{/each}
-			</div>
-		</div>
-
-		{#if practice}
-			<div class="card" style="margin-top: 1.2rem;">
-				<div class="nw-label">Practice sentence</div>
-				<div class="story">{@render tline(practice.tokens)}</div>
-				<div class="ex-actions">
-					<button class="iconbtn" title="Listen" onclick={() => speak(plain(practice.tokens), lang)}>🔊</button>
-					{#if practice.translation}
-						<button class="link" onclick={() => (practiceRevealed = !practiceRevealed)}>
-							{practiceRevealed ? 'Hide' : 'Reveal'} translation
+			<div class="card">
+				<div class="step-kicker">New words</div>
+				<div class="nw-label">Tap a word to hear it</div>
+				<div class="vocab">
+					{#each lesson.words as w (w.lexeme_id)}
+						<button class="vchip {w.status}" title="Listen" onclick={() => speak(w.lemma, lang)}>
+							<strong>{w.lemma}</strong>{#if w.gloss} — {w.gloss}{/if} <span class="spk">🔊</span>
 						</button>
-					{/if}
-				</div>
-				{#if practiceRevealed && practice.translation}<div class="ex-tr">{practice.translation}</div>{/if}
-				<div class="row" style="margin-top: 1rem;">
-					<button onclick={getPractice} disabled={practiceLoading}>Another</button>
+					{/each}
 				</div>
 			</div>
 		{/if}
+
+		<!-- 3. Examples -->
+		{#if current === 'examples'}
+			<div class="card">
+				<div class="step-kicker">See it in use</div>
+				<div class="lesson-examples">
+					{#each lesson.examples as ex, i (i)}
+						<div class="ex">
+							<div class="story">{@render tline(ex.tokens)}</div>
+							{#if revealed.has(i)}<div class="ex-tr">{ex.translation}</div>{/if}
+							<div class="ex-actions">
+								<button class="iconbtn" title="Listen" onclick={() => speak(plain(ex.tokens), lang)}>🔊</button>
+								<button class="link" onclick={() => toggleReveal(i)}>
+									{revealed.has(i) ? 'Hide' : 'Show'} translation
+								</button>
+							</div>
+						</div>
+					{/each}
+				</div>
+				{@render meaning()}
+				<div class="legend">
+					<span><span class="swatch" style="background: var(--known)"></span>known</span>
+					<span><span class="swatch" style="background: var(--partial)"></span>learning</span>
+					<span><span class="swatch" style="background: var(--new)"></span>new</span>
+					<span class="muted">· tap a word for its meaning, 🔊 to hear it</span>
+				</div>
+			</div>
+		{/if}
+
+		<!-- 4. Read -->
+		{#if current === 'read' && lesson.reading}
+			<div class="card">
+				<div class="step-kicker">Read at your level</div>
+				<h2 class="reading-title">{lesson.reading.title}</h2>
+				<div class="story reading">{@render tline(lesson.reading.tokens)}</div>
+				{#if readRevealed}<div class="ex-tr reading-tr">{lesson.reading.translation}</div>{/if}
+				<div class="ex-actions">
+					<button class="iconbtn" title="Listen" onclick={() => speak(plain(lesson.reading.tokens), lang)}>🔊</button>
+					<button class="link" onclick={() => (readRevealed = !readRevealed)}>
+						{readRevealed ? 'Hide' : 'Show'} translation
+					</button>
+				</div>
+				{@render meaning()}
+				<p class="muted" style="margin-top: 0.8rem;">
+					Tap any word you don't recognise to see its meaning — you don't need to understand every
+					word, just the gist.
+				</p>
+			</div>
+		{/if}
+
+		<!-- 5. Practice (live only) -->
+		{#if current === 'practice'}
+			<div class="card">
+				<div class="step-kicker">Practice</div>
+				{#if !practice}
+					<p class="muted">A fresh sentence built from this unit's words, at your level.</p>
+					<button class="primary" onclick={getPractice} disabled={practiceLoading}>
+						{practiceLoading ? 'Generating…' : 'Generate a practice sentence'}
+					</button>
+				{:else}
+					<div class="story">{@render tline(practice.tokens)}</div>
+					<div class="ex-actions">
+						<button class="iconbtn" title="Listen" onclick={() => speak(plain(practice.tokens), lang)}>🔊</button>
+						{#if practice.translation}
+							<button class="link" onclick={() => (practiceRevealed = !practiceRevealed)}>
+								{practiceRevealed ? 'Hide' : 'Reveal'} translation
+							</button>
+						{/if}
+					</div>
+					{#if practiceRevealed && practice.translation}<div class="ex-tr">{practice.translation}</div>{/if}
+					{@render meaning()}
+					<div class="row" style="margin-top: 1rem;">
+						<button onclick={getPractice} disabled={practiceLoading}>Another</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- 6. Check / finish -->
+		{#if current === 'check'}
+			<div class="card">
+				<div class="step-kicker">Check & finish</div>
+				<h2 class="goal">Did you reach the goal?</h2>
+				<p class="objective">🎯 {lesson.objective || lesson.description}</p>
+				<div class="recap">
+					{#each lesson.words as w (w.lexeme_id)}
+						<button class="vchip {w.status}" title="Listen" onclick={() => speak(w.lemma, lang)}>
+							<strong>{w.lemma}</strong>{#if w.gloss} — {w.gloss}{/if}
+						</button>
+					{/each}
+				</div>
+				<p class="muted">
+					Marking this studied credits these words toward your mastery — they'll come back in Review
+					so they stick.
+				</p>
+			</div>
+		{/if}
+
+		<!-- Footer nav -->
+		<div class="nav">
+			<button class="link" onclick={prev} disabled={step === 0}>← Back</button>
+			<span class="nav-count">Step {step + 1} of {steps.length}</span>
+			{#if isLast}
+				<button class="primary" onclick={studied} disabled={saving}>I've studied this ✓</button>
+			{:else}
+				<button class="primary" onclick={next}>Continue →</button>
+			{/if}
+		</div>
 	{/if}
 {/if}
+
+<style>
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.level-badge {
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		color: var(--muted);
+	}
+	.stepper {
+		list-style: none;
+		display: flex;
+		gap: 0.4rem;
+		padding: 0;
+		margin: 1rem 0 1.2rem;
+		flex-wrap: wrap;
+	}
+	.stp {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.8rem;
+		color: var(--muted);
+		opacity: 0.65;
+	}
+	.stp:not(:last-child)::after {
+		content: '';
+		width: 1.1rem;
+		height: 1px;
+		background: var(--border);
+		margin-left: 0.4rem;
+	}
+	.stp.active,
+	.stp.done {
+		opacity: 1;
+	}
+	.stp.active .stp-label {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.stp-num {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.4rem;
+		height: 1.4rem;
+		border-radius: 50%;
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+	.stp.active .stp-num {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.stp.done .stp-num {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #04201d;
+	}
+	.step-kicker {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--accent);
+		font-weight: 700;
+		margin-bottom: 0.5rem;
+	}
+	.goal {
+		margin: 0.2rem 0 0.6rem;
+		font-size: 1.15rem;
+	}
+	.objective {
+		font-size: 1.05rem;
+		font-weight: 600;
+		margin: 0 0 0.8rem;
+	}
+	.reading-title {
+		margin: 0.1rem 0 0.7rem;
+		font-size: 1.1rem;
+	}
+	.story.reading {
+		line-height: 2.1;
+		font-size: 1.05rem;
+	}
+	.reading-tr {
+		margin-top: 0.7rem;
+	}
+	.recap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin: 0.6rem 0 1rem;
+	}
+	.nav {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1.4rem;
+	}
+	.nav-count {
+		font-size: 0.8rem;
+		color: var(--muted);
+	}
+</style>

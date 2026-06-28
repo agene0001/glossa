@@ -26,7 +26,7 @@ pub use lang::{LanguageCode, PartOfSpeech};
 pub use learner::LearnerProfile;
 pub use lexeme::{GrammarPattern, Lexeme};
 pub use mastery::{GrammarState, LexemeState, MasteryState};
-pub use unit::{ExampleSentence, Unit};
+pub use unit::{ExampleSentence, ReadingPassage, Unit};
 
 /// Crate-wide error type. Kept intentionally small; domain logic rarely fails,
 /// and I/O errors belong to the crates that actually do I/O.

@@ -317,6 +317,8 @@ pub struct RoadmapUnit {
     pub id: i64,
     pub title: String,
     pub description: String,
+    /// CEFR level tag, e.g. "A1.1" — shows progression on the roadmap.
+    pub level: String,
     pub target_total: usize,
     pub known: usize,
     pub partial: usize,
@@ -350,15 +352,30 @@ pub struct LessonExample {
     pub translation: String,
 }
 
+/// A unit's graded reading passage, tokenized for highlighting and tap-to-reveal
+/// just like the examples — but at text length (the "books/blogs" core).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LessonReading {
+    pub title: String,
+    pub tokens: Vec<Token>,
+    pub translation: String,
+}
+
 /// The full lesson payload for one unit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnitLesson {
     pub id: i64,
     pub title: String,
     pub description: String,
+    /// CEFR level tag, e.g. "A1.1".
+    pub level: String,
+    /// Learner-facing "can-do" objective for this unit.
+    pub objective: String,
     pub grammar: Option<String>,
     /// Learner-facing grammar explanation (opt-in tip), if the pattern has one.
     pub grammar_tip: Option<String>,
+    /// A short graded reading passage at the unit's level, if authored.
+    pub reading: Option<LessonReading>,
     pub examples: Vec<LessonExample>,
     pub words: Vec<UnitWord>,
     pub percent: u32,
@@ -443,6 +460,7 @@ pub async fn roadmap(
             id: u.id.0,
             title: u.title.clone(),
             description: u.description.clone(),
+            level: u.level.clone(),
             target_total: u.target_lexemes.len(),
             known,
             partial,
@@ -518,6 +536,15 @@ pub async fn unit_lesson(
         })
         .collect();
 
+    let reading = unit.reading.as_ref().map(|r| {
+        let (tokens, _) = tokenize(&r.text, &new_id_set, &form_index, &id_status, &id_gloss);
+        LessonReading {
+            title: r.title.clone(),
+            tokens,
+            translation: r.translation.clone(),
+        }
+    });
+
     let words: Vec<UnitWord> = unit
         .target_lexemes
         .iter()
@@ -543,8 +570,11 @@ pub async fn unit_lesson(
         id: unit.id.0,
         title: unit.title,
         description: unit.description,
+        level: unit.level,
+        objective: unit.objective,
         grammar,
         grammar_tip,
+        reading,
         examples,
         words,
         percent,
@@ -1084,8 +1114,15 @@ mod tests {
                 language: LanguageCode::spanish(),
                 title: "Eating".into(),
                 description: "food".into(),
+                level: "A1.1".into(),
+                objective: "Say what you eat.".into(),
                 target_lexemes: vec![LexemeId(1), LexemeId(2), LexemeId(3)],
                 target_pattern: None,
+                reading: Some(glossa_core::ReadingPassage {
+                    title: "El pan".into(),
+                    text: "Yo como pan.".into(),
+                    translation: "I eat bread.".into(),
+                }),
                 examples: vec![ExampleSentence {
                     text: "Yo como pan.".into(),
                     translation: "I eat bread.".into(),
@@ -1104,6 +1141,11 @@ mod tests {
         let lesson = unit_lesson(&store, &cfg, learner.id, 1).await.unwrap();
         assert!(!lesson.examples[0].tokens.is_empty());
         assert_eq!(lesson.words.len(), 3);
+        assert!(!lesson.objective.is_empty());
+        assert_eq!(lesson.level, "A1.1");
+        let reading = lesson.reading.expect("authored reading passage");
+        assert!(!reading.tokens.is_empty());
+        assert_eq!(reading.title, "El pan");
 
         // Studying the unit advances its words → unit becomes done.
         for _ in 0..6 {

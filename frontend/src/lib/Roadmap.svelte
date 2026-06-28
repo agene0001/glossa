@@ -46,7 +46,9 @@
 				</div>
 				<div class="unit-card">
 					<div class="unit-top">
-						<span class="unit-title">{u.title}</span>
+						<span class="unit-title">
+							{#if u.level}<span class="level-badge">{u.level}</span>{/if}{u.title}
+						</span>
 						<span class="unit-count">{u.known}/{u.target_total} words</span>
 					</div>
 					<div class="unit-desc">{u.description}</div>
@@ -140,6 +142,18 @@
 	.unit-title {
 		font-size: 1.1rem;
 		font-weight: 600;
+	}
+	.level-badge {
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		padding: 0.1rem 0.45rem;
+		margin-right: 0.5rem;
+		border-radius: 999px;
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		color: var(--muted);
+		vertical-align: middle;
 	}
 	.unit-count {
 		font-size: 0.78rem;
