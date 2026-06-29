@@ -93,11 +93,11 @@ frontend  invoke('next_content')
 
 ```bash
 # from the repo root
-npm run setup      # installs the Tauri CLI + the frontend deps
-npm run dev        # launches the desktop app (starts Vite, then Tauri)
+bun run setup (or npm run setup)     # installs the Tauri CLI + the frontend deps
+bun run dev (or npm run dev)       # launches the desktop app (starts Vite, then Tauri)
 ```
 
-`npm run dev` runs `tauri dev`, which boots the SvelteKit dev server and opens
+`bun run dev` runs `tauri dev`, which boots the SvelteKit dev server and opens
 the Glossa window. First launch seeds the Spanish and French inventories and
 creates your learner profile automatically.
 
@@ -110,7 +110,7 @@ launching:
 ```bash
 cp .env.example .env        # then edit it, or just export the var:
 export ANTHROPIC_API_KEY=sk-ant-...
-npm run dev                 # sidebar now shows a `live` badge
+bun run dev (or npm run dev)               # sidebar now shows a `live` badge
 ```
 
 The default model is `claude-opus-4-8`. For the high-volume reading loop you can
