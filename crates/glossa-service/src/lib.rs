@@ -126,6 +126,8 @@ async fn generate_from_request(
     let form_index = glossa_lemma::build_form_index(lexemes);
     let id_gloss: HashMap<LexemeId, Option<String>> =
         lexemes.iter().map(|l| (l.id, l.gloss.clone())).collect();
+    let id_lemma: HashMap<LexemeId, String> =
+        lexemes.iter().map(|l| (l.id, l.lemma.clone())).collect();
 
     // Effective (decayed) status per lexeme the learner has state for.
     let id_status: HashMap<LexemeId, TokenStatus> = lexeme_states
@@ -146,8 +148,14 @@ async fn generate_from_request(
     let new_ids = resolve(&generated.new_words_introduced);
     let new_id_set: HashSet<LexemeId> = new_ids.iter().copied().collect();
 
-    let (tokens, known_ratio) =
-        tokenize(&generated.text, &new_id_set, &form_index, &id_status, &id_gloss);
+    let (tokens, known_ratio) = tokenize(
+        &generated.text,
+        &new_id_set,
+        &form_index,
+        &id_status,
+        &id_gloss,
+        &id_lemma,
+    );
 
     // Words used/introduced, resolved to ids for the event-driven mastery model.
     let mut all_ids = resolve(&generated.known_words_used);
@@ -361,6 +369,23 @@ pub struct LessonReading {
     pub translation: String,
 }
 
+/// One row of a present-tense conjugation table (pronoun → form).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConjugationCell {
+    pub pronoun: String,
+    pub pronoun_gloss: String,
+    pub form: String,
+}
+
+/// A verb the unit teaches, with its present-tense conjugation — so the lesson
+/// explains that `soy`/`eres`/`es` are all `ser`, not separate words.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitConjugation {
+    pub lemma: String,
+    pub gloss: Option<String>,
+    pub cells: Vec<ConjugationCell>,
+}
+
 /// The full lesson payload for one unit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnitLesson {
@@ -376,6 +401,8 @@ pub struct UnitLesson {
     pub grammar_tip: Option<String>,
     /// A short graded reading passage at the unit's level, if authored.
     pub reading: Option<LessonReading>,
+    /// Present-tense conjugations for each verb the unit teaches.
+    pub conjugations: Vec<UnitConjugation>,
     pub examples: Vec<LessonExample>,
     pub words: Vec<UnitWord>,
     pub percent: u32,
@@ -507,6 +534,8 @@ pub async fn unit_lesson(
     let form_index = glossa_lemma::build_form_index(&lexemes);
     let id_gloss: HashMap<LexemeId, Option<String>> =
         lexemes.iter().map(|l| (l.id, l.gloss.clone())).collect();
+    let id_lemma: HashMap<LexemeId, String> =
+        lexemes.iter().map(|l| (l.id, l.lemma.clone())).collect();
     let id_status: HashMap<LexemeId, TokenStatus> = states_vec
         .iter()
         .map(|s| {
@@ -527,8 +556,14 @@ pub async fn unit_lesson(
         .examples
         .iter()
         .map(|ex| {
-            let (tokens, _) =
-                tokenize(&ex.text, &new_id_set, &form_index, &id_status, &id_gloss);
+            let (tokens, _) = tokenize(
+                &ex.text,
+                &new_id_set,
+                &form_index,
+                &id_status,
+                &id_gloss,
+                &id_lemma,
+            );
             LessonExample {
                 tokens,
                 translation: ex.translation.clone(),
@@ -537,13 +572,43 @@ pub async fn unit_lesson(
         .collect();
 
     let reading = unit.reading.as_ref().map(|r| {
-        let (tokens, _) = tokenize(&r.text, &new_id_set, &form_index, &id_status, &id_gloss);
+        let (tokens, _) = tokenize(
+            &r.text,
+            &new_id_set,
+            &form_index,
+            &id_status,
+            &id_gloss,
+            &id_lemma,
+        );
         LessonReading {
             title: r.title.clone(),
             tokens,
             translation: r.translation.clone(),
         }
     });
+
+    // Present-tense table for every verb the unit teaches — the bridge from the
+    // infinitive in the word list to the conjugated forms in the examples.
+    let conjugations: Vec<UnitConjugation> = unit
+        .target_lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).copied())
+        .filter_map(|l| {
+            let cells: Vec<ConjugationCell> = glossa_lemma::present_tense(l)
+                .into_iter()
+                .map(|c| ConjugationCell {
+                    pronoun: c.pronoun.to_string(),
+                    pronoun_gloss: c.gloss.to_string(),
+                    form: c.form,
+                })
+                .collect();
+            (!cells.is_empty()).then(|| UnitConjugation {
+                lemma: l.lemma.clone(),
+                gloss: l.gloss.clone(),
+                cells,
+            })
+        })
+        .collect();
 
     let words: Vec<UnitWord> = unit
         .target_lexemes
@@ -575,6 +640,7 @@ pub async fn unit_lesson(
         grammar,
         grammar_tip,
         reading,
+        conjugations,
         examples,
         words,
         percent,
@@ -976,6 +1042,7 @@ fn tokenize(
     form_index: &HashMap<String, LexemeId>,
     id_status: &HashMap<LexemeId, TokenStatus>,
     id_gloss: &HashMap<LexemeId, Option<String>>,
+    id_lemma: &HashMap<LexemeId, String>,
 ) -> (Vec<Token>, f32) {
     // Group consecutive chars by alphabetic-ness so punctuation/whitespace is
     // preserved verbatim as non-word tokens.
@@ -1000,6 +1067,7 @@ fn tokenize(
                 status: None,
                 lexeme_id: None,
                 gloss: None,
+                lemma: None,
             });
             continue;
         }
@@ -1015,12 +1083,19 @@ fn tokenize(
             known_like += 1;
         }
         let gloss = lexeme_id.and_then(|id| id_gloss.get(&id).cloned().flatten());
+        // Surface the dictionary form only when it isn't what's shown (so the
+        // UI can say "soy → ser" but stays quiet for words already in lemma form).
+        let lemma = lexeme_id
+            .and_then(|id| id_lemma.get(&id))
+            .filter(|l| l.to_lowercase() != norm)
+            .cloned();
         tokens.push(Token {
             text,
             is_word: true,
             status: Some(status),
             lexeme_id,
             gloss,
+            lemma,
         });
     }
 

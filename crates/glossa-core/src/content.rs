@@ -74,6 +74,11 @@ pub struct Token {
     pub lexeme_id: Option<LexemeId>,
     /// Meaning of this word (if known to the inventory), for tap-to-reveal.
     pub gloss: Option<String>,
+    /// The dictionary form this surface word resolves to, set **only when it
+    /// differs** from the displayed text (e.g. `soy` → `ser`). Lets the UI
+    /// explain inflections instead of silently glossing them.
+    #[serde(default)]
+    pub lemma: Option<String>,
 }
 
 /// A new word surfaced to the learner alongside the text (the "5%").

@@ -124,6 +124,9 @@
 				<span class="m-word">{selected.text}</span>
 				<span class="m-gloss">{selected.gloss ?? 'no meaning on file'}</span>
 			</div>
+			{#if selected.lemma}
+				<div class="m-lemma">a form of <strong>{selected.lemma}</strong> — its dictionary form</div>
+			{/if}
 			{#if selected.lexeme_id != null && selected.status !== 'known'}
 				<button onclick={() => markKnown(selected)}>✓ I know this word</button>
 			{/if}
@@ -176,7 +179,7 @@
 				<h2 class="goal">By the end, you'll be able to…</h2>
 				<p class="objective">🎯 {lesson.objective || lesson.description}</p>
 				<p class="muted">
-					This unit teaches {lesson.words.length} new word{lesson.words.length === 1 ? '' : 's'}{#if lesson.grammar}
+					This unit teaches {lesson.words.length} new word{lesson.words.length === 1 ? ' ' : 's '}{#if lesson.grammar}
 						and one grammar focus ({lesson.grammar}){/if}. You'll see them, read them in
 					context, then check what stuck.
 				</p>
@@ -202,6 +205,38 @@
 					{/each}
 				</div>
 			</div>
+
+			{#if lesson.conjugations.length}
+				<div class="card">
+					<div class="step-kicker">How the verbs change</div>
+					<p class="muted" style="margin-top: 0;">
+						Spanish verbs change their ending for each person. These are the same word — you'll see
+						these forms in the examples, so they aren't new vocabulary.
+					</p>
+					{#each lesson.conjugations as c (c.lemma)}
+						<div class="conj">
+							<div class="conj-head">
+								<strong>{c.lemma}</strong>{#if c.gloss} — {c.gloss}{/if}
+								<span class="muted">· present tense</span>
+							</div>
+							<table class="conj-table">
+								<tbody>
+									{#each c.cells as cell (cell.pronoun)}
+										<tr>
+											<td class="conj-pron">{cell.pronoun} <span class="muted">({cell.pronoun_gloss})</span></td>
+											<td class="conj-form">
+												<button class="link-form" title="Listen" onclick={() => speak(cell.form, lang)}>
+													{cell.form} 🔊
+												</button>
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 
 		<!-- 3. Examples -->
@@ -415,6 +450,49 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		margin: 0.6rem 0 1rem;
+	}
+	.m-lemma {
+		margin-top: 0.35rem;
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
+	.conj {
+		margin-top: 1rem;
+		padding-top: 0.9rem;
+		border-top: 1px solid var(--border);
+	}
+	.conj:first-of-type {
+		border-top: none;
+		padding-top: 0;
+	}
+	.conj-head {
+		font-size: 0.98rem;
+		margin-bottom: 0.4rem;
+	}
+	.conj-table {
+		border-collapse: collapse;
+		width: 100%;
+		max-width: 22rem;
+	}
+	.conj-table td {
+		padding: 0.22rem 0.4rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.conj-pron {
+		color: var(--text);
+		width: 55%;
+	}
+	.conj-form {
+		font-weight: 600;
+	}
+	.link-form {
+		background: none;
+		border: none;
+		color: var(--accent);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		padding: 0;
 	}
 	.nav {
 		display: flex;

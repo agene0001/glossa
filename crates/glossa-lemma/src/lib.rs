@@ -35,6 +35,146 @@ pub fn build_form_index(lexemes: &[Lexeme]) -> HashMap<String, LexemeId> {
     map
 }
 
+/// One labeled cell of a present-tense conjugation, e.g. `yo` (I) → `soy`.
+/// Used to *teach* the link between an infinitive and the forms a learner meets
+/// in text (so `ser` and `soy` aren't two unrelated mysteries).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Conjugation {
+    /// Subject pronoun in the target language ("yo", "je").
+    pub pronoun: &'static str,
+    /// Its native-language gloss ("I", "we").
+    pub gloss: &'static str,
+    /// The conjugated verb form for this person ("soy", "suis").
+    pub form: String,
+}
+
+/// Spanish subject pronouns, in the order present-tense tables are emitted.
+const ES_PRONOUNS: [(&str, &str); 5] = [
+    ("yo", "I"),
+    ("tú", "you"),
+    ("él/ella", "he/she"),
+    ("nosotros", "we"),
+    ("ellos/ellas", "they"),
+];
+
+/// French subject pronouns, same ordering.
+const FR_PRONOUNS: [(&str, &str); 5] = [
+    ("je", "I"),
+    ("tu", "you"),
+    ("il/elle", "he/she"),
+    ("nous", "we"),
+    ("ils/elles", "they"),
+];
+
+/// The present-tense conjugation of a verb lexeme, one row per pronoun. Empty
+/// for non-verbs or languages/verbs we don't model — callers just skip it.
+pub fn present_tense(lex: &Lexeme) -> Vec<Conjugation> {
+    if lex.pos != PartOfSpeech::Verb {
+        return Vec::new();
+    }
+    let lemma = lex.lemma.to_lowercase();
+    let (forms, pronouns) = match lex.language.as_str() {
+        "es" => (spanish_present(&lemma), &ES_PRONOUNS),
+        "fr" => (french_present(&lemma), &FR_PRONOUNS),
+        _ => return Vec::new(),
+    };
+    match forms {
+        Some(forms) => pronouns
+            .iter()
+            .zip(forms)
+            .map(|(&(pronoun, gloss), form)| Conjugation { pronoun, gloss, form })
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+/// Present-tense forms [yo, tú, él, nosotros, ellos] for a Spanish verb.
+fn spanish_present(lemma: &str) -> Option<[String; 5]> {
+    if let Some(forms) = spanish_present_irregular(lemma) {
+        return Some(forms.map(String::from));
+    }
+    let (stem, ends) = if let Some(s) = lemma.strip_suffix("ar") {
+        (s, ["o", "as", "a", "amos", "an"])
+    } else if let Some(s) = lemma.strip_suffix("er") {
+        (s, ["o", "es", "e", "emos", "en"])
+    } else if let Some(s) = lemma.strip_suffix("ir") {
+        (s, ["o", "es", "e", "imos", "en"])
+    } else {
+        return None;
+    };
+    Some(ends.map(|e| format!("{stem}{e}")))
+}
+
+/// Curated present tense for high-frequency irregular Spanish verbs.
+fn spanish_present_irregular(lemma: &str) -> Option<[&'static str; 5]> {
+    Some(match lemma {
+        "ser" => ["soy", "eres", "es", "somos", "son"],
+        "estar" => ["estoy", "estás", "está", "estamos", "están"],
+        "ir" => ["voy", "vas", "va", "vamos", "van"],
+        "haber" => ["he", "has", "ha", "hemos", "han"],
+        "tener" => ["tengo", "tienes", "tiene", "tenemos", "tienen"],
+        "hacer" => ["hago", "haces", "hace", "hacemos", "hacen"],
+        "poder" => ["puedo", "puedes", "puede", "podemos", "pueden"],
+        "querer" => ["quiero", "quieres", "quiere", "queremos", "quieren"],
+        "decir" => ["digo", "dices", "dice", "decimos", "dicen"],
+        "ver" => ["veo", "ves", "ve", "vemos", "ven"],
+        "dar" => ["doy", "das", "da", "damos", "dan"],
+        "saber" => ["sé", "sabes", "sabe", "sabemos", "saben"],
+        "venir" => ["vengo", "vienes", "viene", "venimos", "vienen"],
+        "poner" => ["pongo", "pones", "pone", "ponemos", "ponen"],
+        "salir" => ["salgo", "sales", "sale", "salimos", "salen"],
+        "pensar" => ["pienso", "piensas", "piensa", "pensamos", "piensan"],
+        "volver" => ["vuelvo", "vuelves", "vuelve", "volvemos", "vuelven"],
+        "encontrar" => ["encuentro", "encuentras", "encuentra", "encontramos", "encuentran"],
+        "seguir" => ["sigo", "sigues", "sigue", "seguimos", "siguen"],
+        "entender" => ["entiendo", "entiendes", "entiende", "entendemos", "entienden"],
+        _ => return None,
+    })
+}
+
+/// Present-tense forms [je, tu, il, nous, ils] for a French verb.
+fn french_present(lemma: &str) -> Option<[String; 5]> {
+    if let Some(forms) = french_present_irregular(lemma) {
+        return Some(forms.map(String::from));
+    }
+    let stem = lemma.strip_suffix("er")?;
+    // nous keeps a soft g/c: manger → mangeons, commencer → commençons.
+    let nous = if lemma.ends_with("ger") {
+        format!("{stem}eons")
+    } else if lemma.ends_with("cer") {
+        format!("{}çons", &stem[..stem.len() - 1])
+    } else {
+        format!("{stem}ons")
+    };
+    Some([
+        format!("{stem}e"),
+        format!("{stem}es"),
+        format!("{stem}e"),
+        nous,
+        format!("{stem}ent"),
+    ])
+}
+
+/// Curated present tense for high-frequency irregular French verbs.
+fn french_present_irregular(lemma: &str) -> Option<[&'static str; 5]> {
+    Some(match lemma {
+        "être" => ["suis", "es", "est", "sommes", "sont"],
+        "avoir" => ["ai", "as", "a", "avons", "ont"],
+        "aller" => ["vais", "vas", "va", "allons", "vont"],
+        "faire" => ["fais", "fais", "fait", "faisons", "font"],
+        "vouloir" => ["veux", "veux", "veut", "voulons", "veulent"],
+        "pouvoir" => ["peux", "peux", "peut", "pouvons", "peuvent"],
+        "boire" => ["bois", "bois", "boit", "buvons", "boivent"],
+        "voir" => ["vois", "vois", "voit", "voyons", "voient"],
+        "venir" => ["viens", "viens", "vient", "venons", "viennent"],
+        "dire" => ["dis", "dis", "dit", "disons", "disent"],
+        "lire" => ["lis", "lis", "lit", "lisons", "lisent"],
+        "savoir" => ["sais", "sais", "sait", "savons", "savent"],
+        "acheter" => ["achète", "achètes", "achète", "achetons", "achètent"],
+        _ => return None,
+    })
+}
+
 /// All surface forms we recognize for one lexeme (always includes the lemma).
 pub fn surface_forms(lex: &Lexeme) -> Vec<String> {
     let lemma = lex.lemma.to_lowercase();
@@ -253,6 +393,32 @@ mod tests {
         assert_eq!(hit("busqué"), Some(LexemeId(4))); // -car spelling change
         assert_eq!(hit("gatos"), Some(LexemeId(5)));
         assert_eq!(hit("veces"), Some(LexemeId(6))); // -z → -ces plural
+    }
+
+    #[test]
+    fn present_tense_tables() {
+        // Irregular Spanish: ser → soy/eres/es/somos/son, labeled by pronoun.
+        let ser = lex(2, "es", "ser", PartOfSpeech::Verb);
+        let conj = present_tense(&ser);
+        assert_eq!(conj.len(), 5);
+        assert_eq!(conj[0].pronoun, "yo");
+        assert_eq!(conj[0].gloss, "I");
+        assert_eq!(conj[0].form, "soy");
+        assert_eq!(conj[2].form, "es");
+
+        // Regular -ar generates correctly: hablar → hablo … hablan.
+        let hablar = lex(3, "es", "hablar", PartOfSpeech::Verb);
+        let forms: Vec<_> = present_tense(&hablar).into_iter().map(|c| c.form).collect();
+        assert_eq!(forms, ["hablo", "hablas", "habla", "hablamos", "hablan"]);
+
+        // French -ger keeps the soft g in nous: manger → mangeons.
+        let manger = lex(4, "fr", "manger", PartOfSpeech::Verb);
+        assert_eq!(present_tense(&manger)[3].form, "mangeons");
+        assert_eq!(present_tense(&manger)[0].pronoun, "je");
+
+        // Non-verbs have no table.
+        let gato = lex(5, "es", "gato", PartOfSpeech::Noun);
+        assert!(present_tense(&gato).is_empty());
     }
 
     #[test]
