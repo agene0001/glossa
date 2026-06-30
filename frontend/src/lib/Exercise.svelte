@@ -3,6 +3,7 @@
 	// typed production (type_answer). Owns its answered state and feedback; calls
 	// onAnswer(correct) once so the parent can record + advance.
 	import { speak } from '$lib/audio.js';
+	import { posLabel } from '$lib/pos.js';
 
 	let { item, lang = 'es', onAnswer } = $props();
 
@@ -49,6 +50,7 @@
 	<div class="instruction">{item.instruction}</div>
 	<div class="prompt-row">
 		<div class="prompt">{item.prompt}</div>
+		{#if posLabel(item.pos)}<span class="pos-tag">{posLabel(item.pos)}</span>{/if}
 		{#if item.kind === 'choose_meaning'}
 			<button class="iconbtn" title="Listen" onclick={() => speak(word, lang)}>🔊</button>
 		{/if}
@@ -108,6 +110,14 @@
 	.prompt {
 		font-size: 2rem;
 		font-weight: 700;
+	}
+	.pos-tag {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--muted);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 0.1rem 0.45rem;
 	}
 	.options {
 		display: grid;
