@@ -1385,6 +1385,8 @@ pub struct GrammarTrackItem {
     pub id: i64,
     pub title: String,
     pub label: String,
+    /// CEFR level tag (e.g. "A1", "A2") — groups the track.
+    pub level: String,
     pub explanation: Option<String>,
     pub drill_count: usize,
     /// The learner's mastery of this pattern (known / partial / unknown).
@@ -1476,6 +1478,7 @@ pub async fn grammar_track(
                 id: p.id.0,
                 title: lesson_title(p),
                 label: p.label.clone(),
+                level: if p.level.is_empty() { "A1".into() } else { p.level.clone() },
                 explanation: p.explanation.clone(),
                 drill_count: p.drills.len(),
                 status: mastery_to_token(m),
@@ -2443,6 +2446,7 @@ mod tests {
             language: LanguageCode::spanish(),
             label: format!("p{n}"),
             title: title.into(),
+            level: "A1".into(),
             example_template: "ex".into(),
             explanation: Some("explain".into()),
             prerequisites: prereqs,

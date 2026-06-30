@@ -124,11 +124,12 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         note: Some(note.into()),
     };
     #[allow(clippy::too_many_arguments)]
-    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
+    let p = |n: i64, level: &str, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
+        level: level.into(),
         example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
@@ -137,7 +138,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         drills,
     };
     vec![
-        p(1, "gender-articles", "Gender & articles (el / la)", "el libro, la casa, los niños, las mesas",
+        p(1, "A1", "gender-articles", "Gender & articles (el / la)", "el libro, la casa, los niños, las mesas",
           "Every Spanish noun is either masculine or feminine, and the words around it must match. 'the' is el (m.) or la (f.); 'a/an' is un (m.) or una (f.). In the plural they become los/las and unos/unas. The gender belongs to the word itself, so learn it together: la casa, el libro.",
           &[],
           vec![
@@ -156,7 +157,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("Es ___ amigo. (a, m.)", "un", "He is a friend."),
             d("Es ___ mesa. (a, f.)", "una", "It is a table."),
           ]),
-        p(2, "present-regular-ar", "Present tense: -ar verbs", "yo hablo, tú hablas, ella habla",
+        p(2, "A1", "present-regular-ar", "Present tense: -ar verbs", "yo hablo, tú hablas, ella habla",
           "To conjugate a regular -ar verb, drop the -ar and add the endings -o (yo), -as (tú), -a (él/ella), -amos (nosotros), -an (ellos/ellas). So hablar → hablo, hablas, habla, hablamos, hablan.",
           &[],
           vec![
@@ -174,7 +175,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("Nosotros ___ pan. (comprar)", "compramos", "We buy bread."),
             d("Tú ___ mucho. (hablar)", "hablas", "You speak a lot."),
           ]),
-        p(3, "present-regular-er-ir", "Present tense: -er / -ir verbs", "yo como, tú comes, ella vive",
+        p(3, "A1", "present-regular-er-ir", "Present tense: -er / -ir verbs", "yo como, tú comes, ella vive",
           "Regular -er and -ir verbs share almost all their endings: -o, -es, -e, -en. They differ only in the 'we' form — -er verbs take -emos (comemos) while -ir verbs take -imos (vivimos). So comer → como, comes, come, comemos, comen; vivir → vivo, vives, vive, vivimos, viven.",
           &[2],
           vec![
@@ -192,7 +193,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
                "-ir verbs take -imos in the 'we' form (vivimos), where -er verbs take -emos (comemos)."),
             d("Tú ___ una manzana. (comer)", "comes", "You eat an apple."),
           ]),
-        p(4, "ser-vs-estar", "To be: ser vs estar", "Soy estudiante. Estoy en casa.",
+        p(4, "A1", "ser-vs-estar", "To be: ser vs estar", "Soy estudiante. Estoy en casa.",
           "Spanish has two verbs for 'to be'. Use ser for permanent or defining facts — identity, origin, profession, what something fundamentally is (Soy estudiante). Use estar for location and temporary states — where something is, or how it feels right now (Estoy en casa). Both are irregular.",
           &[2],
           vec![
@@ -213,7 +214,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             dn("Yo ___ feliz hoy. (estar)", "estoy", "I am happy today.",
                "A temporary feeling like 'happy today' uses estar: estoy."),
           ]),
-        p(5, "plural-nouns", "Making nouns plural", "un gato, dos gatos; una flor, tres flores",
+        p(5, "A1", "plural-nouns", "Making nouns plural", "un gato, dos gatos; una flor, tres flores",
           "To make a Spanish noun plural, add -s if it ends in a vowel (gato → gatos) and -es if it ends in a consonant (flor → flores). The article goes plural too: el → los, la → las.",
           &[1],
           vec![
@@ -232,7 +233,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             dn("una vez, dos ___ (vez)", "veces", "one time, two times",
                "Nouns ending in -z swap it for -c before -es: vez → veces."),
           ]),
-        p(6, "preterite-regular-ar", "The past tense (-ar verbs)", "Ayer hablé y compré pan.",
+        p(6, "A1", "preterite-regular-ar", "The past tense (-ar verbs)", "Ayer hablé y compré pan.",
           "For completed past actions with -ar verbs, use the preterite. Drop -ar and add -é (yo), -aste (tú), -ó (él/ella), -amos (nosotros), -aron (ellos). So hablar → hablé, hablaste, habló, hablamos, hablaron. The accents on hablé and habló mark the stress on the last syllable.",
           &[2],
           vec![
@@ -549,11 +550,12 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         note: Some(note.into()),
     };
     #[allow(clippy::too_many_arguments)]
-    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
+    let p = |n: i64, level: &str, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
+        level: level.into(),
         example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
@@ -562,7 +564,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         drills,
     };
     vec![
-        p(1, "articles-le-la", "Gender & articles (le / la)", "le livre, la maison; un, une",
+        p(1, "A1", "articles-le-la", "Gender & articles (le / la)", "le livre, la maison; un, une",
           "French nouns are masculine or feminine. 'the' is le (m.) or la (f.), and both shorten to l' before a vowel sound (l'ami, l'eau). 'a/an' is un (m.) or une (f.). The plural 'the' is les for every gender. Gender is part of the word, so learn it together: la maison, le livre.",
           &[],
           vec![
@@ -581,7 +583,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("C'est ___ ami. (a, m.)", "un", "He is a friend."),
             d("C'est ___ pomme. (a, f.)", "une", "It's an apple."),
           ]),
-        p(2, "present-er-verbs", "Present tense: -er verbs", "je parle, tu parles, il parle",
+        p(2, "A1", "present-er-verbs", "Present tense: -er verbs", "je parle, tu parles, il parle",
           "Regular -er verbs are the largest group. Drop -er and add -e (je), -es (tu), -e (il/elle), -ons (nous), -ez (vous), -ent (ils/elles). So parler → je parle, tu parles, il parle, nous parlons, ils parlent.",
           &[],
           vec![
@@ -599,7 +601,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
                "-ger verbs keep an e in the nous form to preserve the soft 'g' sound: mangeons, not 'mangons'."),
             d("Tu ___ beaucoup. (parler)", "parles", "You speak a lot."),
           ]),
-        p(3, "etre-avoir", "To be & to have (être, avoir)", "je suis, j'ai",
+        p(3, "A1", "etre-avoir", "To be & to have (être, avoir)", "je suis, j'ai",
           "être (to be) and avoir (to have) are the two most essential French verbs, and both are completely irregular. être: je suis, tu es, il/elle est, nous sommes, vous êtes, ils sont. avoir: j'ai, tu as, il/elle a, nous avons, vous avez, ils ont. They also build the past tense, so they're worth mastering early.",
           &[],
           vec![
@@ -619,7 +621,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("Il ___ content. (être)", "est", "He is happy."),
             d("Nous ___ un chat. (avoir)", "avons", "We have a cat."),
           ]),
-        p(4, "negation-ne-pas", "Negation (ne … pas)", "je ne parle pas",
+        p(4, "A1", "negation-ne-pas", "Negation (ne … pas)", "je ne parle pas",
           "To make a sentence negative, French wraps the conjugated verb in two parts: ne before it and pas after it. So je parle → je ne parle pas. Before a vowel, ne shortens to n': je n'ai pas.",
           &[2],
           vec![
@@ -639,7 +641,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             dn("Tu ne ___ pas. (boire)", "bois", "You do not drink.",
                "boire is irregular: je bois, tu bois, il boit."),
           ]),
-        p(5, "plural-s", "Making nouns plural", "un livre, deux livres",
+        p(5, "A1", "plural-s", "Making nouns plural", "un livre, deux livres",
           "Most French nouns add an -s to form the plural — but that -s is silent, so singular and plural usually sound the same (le livre / les livres). What you actually hear is the article changing: le, la, and l' all become les.",
           &[1],
           vec![
@@ -813,11 +815,12 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         note: Some(note.into()),
     };
     #[allow(clippy::too_many_arguments)]
-    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
+    let p = |n: i64, level: &str, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
+        level: level.into(),
         example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
@@ -826,7 +829,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         drills,
     };
     vec![
-        p(1, "articles-der-die-das", "Gender & articles (der / die / das)", "der Mann, die Frau, das Kind",
+        p(1, "A1", "articles-der-die-das", "Gender & articles (der / die / das)", "der Mann, die Frau, das Kind",
           "Every German noun has a gender — masculine, feminine, or neuter — and 'the' changes with it: der (m.), die (f.), das (n.). For 'a/an' it's ein (m./n.) or eine (f.). The gender belongs to the word itself, not to the meaning, so it must be learned with each noun.",
           &[],
           vec![
@@ -844,7 +847,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("___ Kind spielt. (the, n.)", "das", "The child plays."),
             d("Das ist ___ Haus. (a, n.)", "ein", "That is a house."),
           ]),
-        p(2, "present-tense", "Present tense", "ich mache, du machst, er macht",
+        p(2, "A1", "present-tense", "Present tense", "ich mache, du machst, er macht",
           "To conjugate a regular verb, drop the -en from the infinitive and add an ending for each person. The endings are -e (ich), -st (du), -t (er/sie/es), -en (wir, sie, Sie), -t (ihr). So machen → ich mache, du machst, er macht, wir machen.",
           &[],
           vec![
@@ -863,7 +866,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
                "essen is a stem-changer (e→i): ich esse, but du isst and er isst — not 'esst'."),
             d("Wir ___ in der Stadt. (wohnen)", "wohnen", "We live in the city."),
           ]),
-        p(3, "sein-haben", "To be & to have (sein, haben)", "ich bin, ich habe",
+        p(3, "A1", "sein-haben", "To be & to have (sein, haben)", "ich bin, ich habe",
           "sein (to be) and haben (to have) are the two most important verbs in German — and both are irregular, so every form has to be learned by heart. sein: ich bin, du bist, er/sie/es ist, wir/sie sind, ihr seid. haben: ich habe, du hast, er hat, wir/sie haben, ihr habt.",
           &[],
           vec![
@@ -882,7 +885,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("Sie ___ eine Frau. (sein)", "ist", "She is a woman."),
             d("Wir ___ Zeit. (haben)", "haben", "We have time."),
           ]),
-        p(4, "plural-nouns", "Plural nouns", "der Hund → die Hunde, das Kind → die Kinder",
+        p(4, "A1", "plural-nouns", "Plural nouns", "der Hund → die Hunde, das Kind → die Kinder",
           "German has no single way to make a plural. A noun takes one of several endings — and sometimes an umlaut — depending on the word, so the plural is learned together with the noun (and its gender).",
           &[1],
           vec![
@@ -902,7 +905,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             d("ein Auto, zwei ___ (Auto)", "Autos", "two cars"),
             d("eine Frau, zwei ___ (Frau)", "Frauen", "two women"),
           ]),
-        p(5, "negation-nicht-kein", "Negation (nicht / kein)", "Ich bin nicht müde. Das ist kein Hund.",
+        p(5, "A1", "negation-nicht-kein", "Negation (nicht / kein)", "Ich bin nicht müde. Das ist kein Hund.",
           "German negates in two ways. Use kein/keine to say 'no / not a' before a noun — it replaces ein/eine and takes the same endings. Use nicht for everything else: to negate a verb, an adjective, or a noun that has a definite article.",
           &[2],
           vec![
@@ -922,7 +925,7 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
             dn("Er hat ___ Zeit. (no, f.)", "keine", "He has no time.",
                "Zeit is feminine, so 'no time' is keine Zeit — kein takes an -e like eine."),
           ]),
-        p(6, "word-order-v2", "Word order (verb second)", "Heute lerne ich Deutsch.",
+        p(6, "A1", "word-order-v2", "Word order (verb second)", "Heute lerne ich Deutsch.",
           "In a German main clause the conjugated verb is always the second element — not necessarily the second word, but the second 'piece' of the sentence. Whatever comes first (the subject, or a time/place phrase), the verb follows immediately, and if you didn't start with the subject, it slides in right after the verb.",
           &[2],
           vec![
@@ -940,6 +943,113 @@ fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
                "After 'Morgen', the verb comes before the subject: Morgen fahren wir — verb second."),
             d("Jetzt ___ er Kaffee. (trinken)", "trinkt", "Now he drinks coffee."),
             d("Hier ___ ich. (arbeiten)", "arbeite", "Here I work."),
+          ]),
+        // --- A2 ---
+        p(7, "A2", "perfekt", "The past tense (Perfekt)", "Ich habe Brot gegessen. Wir sind gefahren.",
+          "For talking about the past in conversation, German uses the Perfekt: a helper verb (haben or sein) in the present, plus the past participle at the END of the sentence. Most verbs use haben; verbs of movement or change of state use sein. Weak verbs form the participle ge…t (machen → gemacht), strong verbs often ge…en with a stem change (essen → gegessen).",
+          &[2, 3],
+          vec![
+            ex("Ich habe Brot gegessen.", "I ate bread / I have eaten bread."),
+            ex("Wir sind nach Berlin gefahren.", "We went to Berlin."),
+          ],
+          &[
+            "Word order: the helper (haben/sein) is in second position and the participle goes to the very end — Ich habe gestern Pizza gegessen.",
+            "Use sein (not haben) with verbs of motion or change of state: gehen → ich bin gegangen, fahren → ich bin gefahren, kommen → ich bin gekommen.",
+            "Weak verbs: ge- + stem + -t (gemacht, gelernt, gekauft). Strong verbs change the stem and end in -en (gegessen, getrunken, gesprochen) — learn these one by one.",
+          ],
+          vec![
+            dn("Ich ___ Brot gegessen. (haben)", "habe", "I ate bread.",
+               "Perfekt with haben: ich habe … gegessen — the participle stays at the end."),
+            dn("Wir ___ nach Berlin gefahren. (sein)", "sind", "We went to Berlin.",
+               "fahren is a motion verb, so its Perfekt uses sein: wir sind … gefahren."),
+            dn("Ich habe Deutsch ___. (participle of: lernen)", "gelernt", "I learned German.",
+               "Weak verbs: ge- + stem + -t, so lernen → gelernt."),
+            dn("Du hast Wasser ___. (participle of: trinken)", "getrunken", "You drank water.",
+               "trinken is strong: getrunken (stem change + ge…en)."),
+          ]),
+        p(8, "A2", "akkusativ", "The accusative case (direct object)", "Ich sehe den Mann. Ich habe einen Hund.",
+          "The accusative marks the direct object — the thing directly receiving the action. The trick: only the MASCULINE article changes (der → den, ein → einen). Feminine (die/eine), neuter (das/ein), and plural (die) look exactly the same as the subject form.",
+          &[1],
+          vec![
+            ex("Ich sehe den Mann.", "I see the man."),
+            ex("Ich habe einen Hund.", "I have a dog."),
+            ex("Ich kaufe das Buch.", "I buy the book."),
+          ],
+          &[
+            "Only masculine changes: der → den, ein → einen, kein → keinen, mein → meinen. Feminine, neuter, and plural are identical to the subject form.",
+            "Common accusative verbs: haben, sehen, essen, kaufen, brauchen — 'Ich brauche einen Stuhl.'",
+            "These prepositions always take the accusative: für, ohne, durch, gegen, um.",
+          ],
+          vec![
+            dn("Ich sehe ___ Mann. (the, m.)", "den", "I see the man.",
+               "Masculine direct object: der → den. (Feminine/neuter wouldn't change.)"),
+            dn("Ich habe ___ Hund. (a, m.)", "einen", "I have a dog.",
+               "Masculine accusative: ein → einen."),
+            dn("Ich kaufe ___ Buch. (the, n.)", "das", "I buy the book.",
+               "Neuter doesn't change in the accusative: das stays das."),
+            dn("Ich trinke ___ Milch. (the, f.)", "die", "I drink the milk.",
+               "Feminine doesn't change in the accusative: die stays die."),
+          ]),
+        p(9, "A2", "dativ", "The dative case (indirect object)", "Ich gebe dem Mann ein Buch.",
+          "The dative marks the indirect object — usually the person TO whom or FOR whom something is done. Here all the articles change: masculine/neuter der/das → dem, feminine die → der, and plural die → den (and the noun adds -n).",
+          &[8],
+          vec![
+            ex("Ich gebe dem Kind einen Apfel.", "I give the child an apple."),
+            ex("Ich helfe der Frau.", "I help the woman."),
+          ],
+          &[
+            "Dative articles: masculine/neuter → dem, feminine → der, plural → den (+ -n on the noun: den Kindern).",
+            "Some verbs always take the dative: helfen, danken, gefallen, gehören — 'Ich danke dem Mann.'",
+            "These prepositions always take the dative: mit, nach, aus, bei, von, zu, seit — 'Ich fahre mit dem Auto.'",
+          ],
+          vec![
+            dn("Ich helfe ___ Frau. (the, f.)", "der", "I help the woman.",
+               "helfen takes the dative, and feminine die → der."),
+            dn("Ich gebe ___ Mann ein Buch. (the, m.)", "dem", "I give the man a book.",
+               "Masculine/neuter dative: der/das → dem."),
+            dn("Ich fahre mit ___ Auto. (the, n.)", "dem", "I'm going by car.",
+               "mit always takes the dative; neuter das → dem."),
+            d("Ich danke ___ Kind. (the, n.)", "dem", "I thank the child."),
+          ]),
+        p(10, "A2", "modalverben", "Modal verbs (können, müssen, …)", "Ich kann Deutsch sprechen.",
+          "Modal verbs — können (can), müssen (must), wollen (want), dürfen (may), sollen (should), mögen (like) — express ability, necessity, or wish. The modal is conjugated in second position and the MAIN verb drops to the end as an infinitive: Ich kann Deutsch sprechen.",
+          &[2, 6],
+          vec![
+            ex("Ich kann Deutsch sprechen.", "I can speak German."),
+            ex("Wir müssen jetzt gehen.", "We have to go now."),
+          ],
+          &[
+            "Word order: modal in 2nd position, the main verb as an infinitive at the very end — Ich will heute Brot kaufen.",
+            "The singular is irregular and usually loses the umlaut: können → ich kann, du kannst, er kann; müssen → ich muss; wollen → ich will.",
+            "The plural forms are regular: wir/sie können, müssen, wollen.",
+          ],
+          vec![
+            dn("Ich ___ Deutsch sprechen. (können)", "kann", "I can speak German.",
+               "Modal singular is irregular (no umlaut): ich kann — and 'sprechen' goes to the end."),
+            dn("Wir ___ jetzt gehen. (müssen)", "müssen", "We have to go now.",
+               "Plural modals are regular: wir müssen … gehen."),
+            d("Du ___ ins Kino gehen. (wollen → du)", "willst", "You want to go to the cinema."),
+            d("Er ___ ein Auto kaufen. (wollen → er)", "will", "He wants to buy a car."),
+          ]),
+        p(11, "A2", "nebensatz", "Subordinate clauses (weil, dass)", "Ich lerne Deutsch, weil es wichtig ist.",
+          "Conjunctions like weil (because), dass (that), wenn (if/when), and ob (whether) start a subordinate clause — and they push the conjugated verb to the very END of that clause. So it's '…, weil es wichtig IST', not '…weil es ist wichtig'.",
+          &[6],
+          vec![
+            ex("Ich bleibe zu Hause, weil ich müde bin.", "I'm staying home because I'm tired."),
+            ex("Ich weiß, dass du Deutsch sprichst.", "I know that you speak German."),
+          ],
+          &[
+            "After weil/dass/wenn/ob, the conjugated verb moves to the end of its clause: …, weil ich müde BIN.",
+            "A comma separates the two clauses.",
+            "Contrast with und / oder / aber (coordinating conjunctions), which do NOT change the word order.",
+          ],
+          vec![
+            dn("Ich bleibe zu Hause, weil ich müde ___. (sein → ich)", "bin", "I'm staying home because I'm tired.",
+               "After 'weil' the verb goes to the end: …, weil ich müde bin."),
+            dn("Ich weiß, dass er Deutsch ___. (sprechen → er)", "spricht", "I know that he speaks German.",
+               "After 'dass' the verb goes last: …, dass er Deutsch spricht."),
+            d("Ich lerne, weil es wichtig ___. (sein → es)", "ist", "I study because it's important."),
+            d("Wir essen, weil wir hungrig ___. (sein → wir)", "sind", "We eat because we're hungry."),
           ]),
     ]
 }

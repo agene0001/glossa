@@ -53,6 +53,9 @@ pub struct GrammarPattern {
     /// Learner-facing title for the Grammar track, e.g. "The past tense (-ar)".
     #[serde(default)]
     pub title: String,
+    /// CEFR level tag (e.g. "A1", "A2", "B1"), to group the Grammar track.
+    #[serde(default)]
+    pub level: String,
     pub example_template: String,
     /// Optional learner-facing explanation, shown as a tip inside a unit lesson
     /// (spec §2.2: surfaced only as opt-in support, never a gate).

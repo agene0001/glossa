@@ -23,6 +23,20 @@
 
 	const dot = (s) => (s === 'done' ? '✓' : s === 'locked' ? '🔒' : '▸');
 	const cta = (it) => (it.status === 'known' ? 'Review' : it.status === 'partial' ? 'Keep going' : 'Start');
+
+	// Group lessons by CEFR level, preserving the (id-ordered) sequence.
+	let grouped = $derived.by(() => {
+		const out = [];
+		for (const it of items) {
+			let g = out.find((x) => x.level === it.level);
+			if (!g) {
+				g = { level: it.level || 'A1', items: [] };
+				out.push(g);
+			}
+			g.items.push(it);
+		}
+		return out;
+	});
 </script>
 
 <div class="page-head">
@@ -36,33 +50,51 @@
 {#if loading}
 	<p class="muted">Loading…</p>
 {:else}
-	<ol class="list">
-		{#each items as it (it.id)}
-			<li class="node {it.state}">
-				<div class="dot">{dot(it.state)}</div>
-				<div class="card">
-					<div class="top">
-						<span class="title">{it.title}</span>
-						<span class="status {it.status}">{it.status}</span>
+	{#each grouped as group (group.level)}
+		<div class="level-head"><span class="level-badge">{group.level}</span></div>
+		<ol class="list">
+			{#each group.items as it (it.id)}
+				<li class="node {it.state}">
+					<div class="dot">{dot(it.state)}</div>
+					<div class="card">
+						<div class="top">
+							<span class="title">{it.title}</span>
+							<span class="status {it.status}">{it.status}</span>
+						</div>
+						{#if it.explanation}<div class="expl">{it.explanation}</div>{/if}
+						<div class="actions">
+							{#if it.state === 'locked'}
+								<span class="muted">Start {it.locked_on.join(', ')} first</span>
+							{:else}
+								<button class:primary={it.state !== 'done'} onclick={() => onOpen(it.id)}>
+									{cta(it)} →
+								</button>
+								<span class="muted">{it.drill_count} drills</span>
+							{/if}
+						</div>
 					</div>
-					{#if it.explanation}<div class="expl">{it.explanation}</div>{/if}
-					<div class="actions">
-						{#if it.state === 'locked'}
-							<span class="muted">Start {it.locked_on.join(', ')} first</span>
-						{:else}
-							<button class:primary={it.state !== 'done'} onclick={() => onOpen(it.id)}>
-								{cta(it)} →
-							</button>
-							<span class="muted">{it.drill_count} drills</span>
-						{/if}
-					</div>
-				</div>
-			</li>
-		{/each}
-	</ol>
+				</li>
+			{/each}
+		</ol>
+	{/each}
 {/if}
 
 <style>
+	.level-head {
+		margin: 1.6rem 0 0.8rem;
+	}
+	.level-head:first-child {
+		margin-top: 0;
+	}
+	.level-badge {
+		font-size: 0.85rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		padding: 0.2rem 0.7rem;
+		border-radius: 999px;
+		background: var(--accent);
+		color: #04201d;
+	}
 	.list {
 		list-style: none;
 		margin: 0;

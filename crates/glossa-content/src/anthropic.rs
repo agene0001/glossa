@@ -373,6 +373,7 @@ mod tests {
                 language: LanguageCode::spanish(),
                 label: "preterite-regular-ar".into(),
                 title: String::new(),
+                level: String::new(),
                 example_template: "Ayer ___é ...".into(),
                 explanation: None,
                 prerequisites: Vec::new(),
