@@ -91,6 +91,7 @@ fn available_languages() -> Vec<LanguageOption> {
         LanguageOption { code: "es", name: "Spanish" },
         LanguageOption { code: "fr", name: "French" },
         LanguageOption { code: "de", name: "German" },
+        LanguageOption { code: "ru", name: "Russian" },
     ]
 }
 

@@ -253,6 +253,7 @@ mod tests {
             pos: PartOfSpeech::Noun,
             frequency_rank: rank,
             gloss: None,
+            transliteration: None,
         }
     }
 

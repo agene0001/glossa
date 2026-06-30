@@ -204,6 +204,7 @@
 						<li class="word {w.status}">
 							<button class="iconbtn" title="Listen" onclick={() => speak(w.lemma, lang)}>🔊</button>
 							<span class="w-lemma">{w.lemma}</span>
+							{#if w.transliteration}<span class="translit">{w.transliteration}</span>{/if}
 							{#if posLabel(w.pos)}<span class="pos-tag">{posLabel(w.pos)}</span>{/if}
 							<span class="w-gloss">{w.gloss ?? '—'}</span>
 							<button class="del" title="Remove" onclick={() => removeWord(w.lexeme_id)} disabled={busy}>✕</button>
@@ -311,6 +312,11 @@
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		padding: 0.05rem 0.4rem;
+	}
+	.translit {
+		color: var(--muted);
+		font-style: italic;
+		font-size: 0.85rem;
 	}
 	.w-gloss {
 		color: var(--muted);

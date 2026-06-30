@@ -481,6 +481,7 @@ mod tests {
             pos,
             frequency_rank: id as u32,
             gloss: None,
+            transliteration: None,
         }
     }
 

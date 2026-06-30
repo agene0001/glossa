@@ -22,6 +22,11 @@ pub struct Lexeme {
     /// this, content isn't comprehensible — you can't learn a word you can't
     /// understand. `None` if the seed list didn't provide one.
     pub gloss: Option<String>,
+    /// Latin-script romanization, for languages whose script the learner is
+    /// still acquiring (e.g. Russian `кошка` → `koshka`). `None` for
+    /// Latin-script languages, which don't need it.
+    #[serde(default)]
+    pub transliteration: Option<String>,
 }
 
 /// One grammar drill: a sentence with a blank to fill, its answer, and a

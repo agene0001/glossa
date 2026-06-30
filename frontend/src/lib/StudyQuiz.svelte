@@ -92,6 +92,7 @@
 				onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flip()}>
 				{#if !flipped}
 					<div class="fc-word">{card.lemma}</div>
+					{#if card.transliteration}<div class="fc-translit">{card.transliteration}</div>{/if}
 					{#if posLabel(card.pos)}<div class="fc-pos">{posLabel(card.pos)}</div>{/if}
 					<div class="fc-hint">tap to reveal meaning</div>
 				{:else}
@@ -206,6 +207,11 @@
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		padding: 0.1rem 0.5rem;
+	}
+	.fc-translit {
+		color: var(--muted);
+		font-style: italic;
+		font-size: 1rem;
 	}
 	.nav {
 		display: flex;

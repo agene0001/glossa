@@ -22,11 +22,15 @@ struct SeedWord {
     lemma: String,
     pos: PartOfSpeech,
     gloss: String,
+    /// Latin-script romanization for non-Latin languages (optional).
+    #[serde(default)]
+    transliteration: Option<String>,
 }
 
 const ES_FREQUENCY: &str = include_str!("../seed/es_frequency.json");
 const FR_FREQUENCY: &str = include_str!("../seed/fr_frequency.json");
 const DE_FREQUENCY: &str = include_str!("../seed/de_frequency.json");
+const RU_FREQUENCY: &str = include_str!("../seed/ru_frequency.json");
 
 /// Sync every supported language's inventory from its bundled seed on launch.
 /// Idempotent: ids are assigned by list order, so re-running updates existing
@@ -62,6 +66,16 @@ pub async fn sync_inventory(store: &dyn Store) -> Result<(), StorageError> {
         german_packs,
     )
     .await?;
+    seed_language(
+        store,
+        &LanguageCode::new("ru"),
+        3000,
+        RU_FREQUENCY,
+        russian_grammar,
+        russian_units,
+        russian_packs,
+    )
+    .await?;
     Ok(())
 }
 
@@ -88,6 +102,7 @@ async fn seed_language(
             pos: w.pos,
             frequency_rank: i as u32 + 1,
             gloss: Some(w.gloss),
+            transliteration: w.transliteration,
         })
         .collect();
     store.upsert_lexemes(&lexemes).await?;
@@ -1354,6 +1369,172 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
     ]
 }
 
+// --- Russian (Cyrillic) --------------------------------------------------
+
+fn russian_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
+    let ex = |t: &str, tr: &str| ExampleSentence { text: t.into(), translation: tr.into() };
+    let d = |prompt: &str, answer: &str, tr: &str| GrammarDrill {
+        prompt: prompt.into(), answer: answer.into(), translation: tr.into(), note: None,
+    };
+    let dn = |prompt: &str, answer: &str, tr: &str, note: &str| GrammarDrill {
+        prompt: prompt.into(), answer: answer.into(), translation: tr.into(), note: Some(note.into()),
+    };
+    #[allow(clippy::too_many_arguments)]
+    let p = |n: i64, level: &str, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
+        id: PatternId(base + n),
+        language: language.clone(),
+        label: label.into(),
+        title: title.into(),
+        level: level.into(),
+        example_template: ex_tmpl.into(),
+        explanation: Some(expl.into()),
+        prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        examples,
+        notes: notes.iter().map(|s| s.to_string()).collect(),
+        drills,
+    };
+    vec![
+        p(1, "A1", "no-present-be", "There's no \"to be\" in the present", "Я студент. = I [am] a student.",
+          "In the present tense, Russian has no word for am/is/are. You simply put the subject beside the rest of the sentence: Я студент means 'I [am] a student'. The verb быть (to be) reappears only in the past and future.",
+          &[],
+          vec![
+            ex("Я дома.", "I am home."),
+            ex("Это мой друг.", "This is my friend."),
+          ],
+          &[
+            "Just omit 'to be': Он врач = 'He [is] a doctor', not 'He is a doctor'.",
+            "In writing, a dash sometimes replaces the missing verb between two nouns: Москва — город ('Moscow is a city').",
+            "The verb быть does come back in the past (был/была) and future (буду).",
+          ],
+          vec![
+            dn("___ друг. (I)", "Я", "I am a friend.", "No verb for 'am' — just the pronoun: Я друг."),
+            d("___ дома. (we)", "Мы", "We are home."),
+            d("___ хороший. (he)", "Он", "He is good."),
+            d("___ красивая. (she)", "Она", "She is beautiful."),
+          ]),
+        p(2, "A1", "present-tense", "Present tense (-ать verbs)", "я читаю, ты читаешь, он читает",
+          "Most verbs whose infinitive ends in -ать conjugate the same way in the present: drop -ть and add -ю (я), -ешь (ты), -ет (он/она), -ем (мы), -ете (вы), -ют (они). So читать → читаю, читаешь, читает, читаем, читаете, читают.",
+          &[1],
+          vec![
+            ex("Я читаю книгу.", "I read a book."),
+            ex("Мы работаем здесь.", "We work here."),
+          ],
+          &[
+            "Endings: -ю, -ешь, -ет, -ем, -ете, -ют. The subject pronoun is often kept (unlike Spanish) but the ending already marks the person.",
+            "Russian has one present tense — 'читаю' means both 'I read' and 'I am reading'.",
+            "Many common verbs are irregular (есть, идти, хотеть) and are learned individually.",
+          ],
+          vec![
+            dn("Я ___ книгу. (читать → я)", "читаю", "I read a book.", "-ать verb, я-form ending -ю: читаю."),
+            dn("Ты ___ здесь. (работать → ты)", "работаешь", "You work here.", "ты-form ending -ешь: работаешь."),
+            d("Мы ___ это. (делать → мы)", "делаем", "We do this."),
+            d("Они ___ дома. (работать → они)", "работают", "They work at home."),
+          ]),
+    ]
+}
+
+fn russian_units(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<Unit> {
+    let resolve = |lemmas: &[&str]| -> Vec<LexemeId> {
+        lemmas.iter().filter_map(|w| ids.get(*w).copied()).collect()
+    };
+    let ex = |t: &str, tr: &str| ExampleSentence { text: t.into(), translation: tr.into() };
+    let rd = |title: &str, text: &str, tr: &str| Some(ReadingPassage {
+        title: title.into(), text: text.into(), translation: tr.into(),
+    });
+    #[allow(clippy::too_many_arguments)]
+    let unit = |n: i64, level: &str, title: &str, objective: &str, desc: &str, words: &[&str], pat: Option<i64>, reading: Option<ReadingPassage>, examples: Vec<ExampleSentence>| Unit {
+        id: UnitId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        description: desc.into(),
+        level: level.into(),
+        objective: objective.into(),
+        target_lexemes: resolve(words),
+        target_pattern: pat.map(|n| PatternId(base + n)),
+        reading,
+        examples,
+    };
+    vec![
+        unit(1, "A1.1", "First Words & Greetings",
+            "Greet people, say thank you, and say yes and no.",
+            "Say hello and meet your first words — with no 'to be' needed.",
+            &["привет", "спасибо", "пожалуйста", "да", "нет", "я", "ты", "и"], Some(1),
+            rd("Два друга",
+                "— Привет! Я Анна. — Привет, Анна! — Спасибо! — Пожалуйста.",
+                "— Hi! I'm Anna. — Hi, Anna! — Thank you! — You're welcome."),
+            vec![
+                ex("Привет! Я друг.", "Hi! I'm a friend."),
+                ex("Спасибо.", "Thank you."),
+                ex("Да или нет?", "Yes or no?"),
+                ex("Ты и я.", "You and I."),
+            ]),
+        unit(2, "A1.1", "People & Family",
+            "Name the people in a family.",
+            "The people around you.",
+            &["человек", "мужчина", "женщина", "ребёнок", "друг", "семья", "мать", "отец"], None,
+            rd("Семья",
+                "Это моя семья. Отец — мужчина. Мать — женщина. Ребёнок дома. Хорошая семья!",
+                "This is my family. The father is a man. The mother is a woman. The child is home. A good family!"),
+            vec![
+                ex("Это мужчина и женщина.", "This is a man and a woman."),
+                ex("Мой друг здесь.", "My friend is here."),
+                ex("Мать и отец.", "Mother and father."),
+                ex("Это человек.", "This is a person."),
+            ]),
+        unit(3, "A1.1", "Home & Things",
+            "Name common things at home.",
+            "Objects around the house.",
+            &["дом", "стол", "дверь", "книга", "вода", "собака", "кошка"], None,
+            rd("Дома",
+                "Дома есть собака и кошка. На столе книга и вода. Это хороший дом.",
+                "At home there is a dog and a cat. On the table are a book and water. It's a good house."),
+            vec![
+                ex("Книга на столе.", "The book is on the table."),
+                ex("Собака и кошка.", "A dog and a cat."),
+                ex("Вода дома.", "The water is at home."),
+                ex("Это дверь.", "This is a door."),
+            ]),
+        unit(4, "A1.2", "Eating & Drinking",
+            "Say what you eat and drink.",
+            "Food and drink, with your first verbs.",
+            &["есть", "пить", "хлеб", "молоко", "кофе", "чай", "яблоко", "сыр"], Some(2),
+            rd("Завтрак",
+                "Утром я ем хлеб и яблоко. Мать пьёт кофе, отец пьёт чай. Хорошо!",
+                "In the morning I eat bread and an apple. Mother drinks coffee, father drinks tea. Good!"),
+            vec![
+                ex("Я ем хлеб.", "I eat bread."),
+                ex("Ты пьёшь молоко.", "You drink milk."),
+                ex("Кофе или чай?", "Coffee or tea?"),
+                ex("Это сыр и яблоко.", "This is cheese and an apple."),
+            ]),
+    ]
+}
+
+fn russian_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<VocabPack> {
+    let pack = |n: i64, emoji: &str, title: &str, desc: &str, words: &[&str]| VocabPack {
+        id: PackId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        emoji: emoji.into(),
+        description: desc.into(),
+        lexemes: words.iter().filter_map(|w| ids.get(*w).copied()).collect(),
+    };
+    vec![
+        pack(1, "🍽️", "Food & Drink", "Talk about food and drink.",
+            &["хлеб", "молоко", "кофе", "чай", "яблоко", "сыр", "мясо", "вода"]),
+        pack(2, "👨‍👩‍👧", "People & Family", "The people in your life.",
+            &["человек", "мужчина", "женщина", "ребёнок", "друг", "семья", "мать", "отец"]),
+        pack(3, "🏠", "Home & Things", "Things around the home.",
+            &["дом", "стол", "дверь", "книга", "собака", "кошка", "машина"]),
+        pack(4, "🗣️", "Common Verbs", "Everyday verbs.",
+            &["быть", "есть", "пить", "идти", "читать", "писать", "говорить", "знать",
+              "хотеть", "любить", "жить", "работать", "делать", "видеть"]),
+        pack(5, "🎨", "Describing & Colors", "Describe how things are.",
+            &["хороший", "плохой", "большой", "маленький", "новый", "старый", "красивый",
+              "красный", "синий", "зелёный", "чёрный", "белый"]),
+    ]
+}
+
 // --- pronunciation guides (static reference, no learner state) -----------
 
 /// The pronunciation primer for a language, or `None` if we don't have one.
@@ -1372,6 +1553,10 @@ pub fn pronunciation_guide(language: &LanguageCode) -> Option<PronunciationGuide
             "The French alphabet and numbers, plus the sounds that trip up English speakers (and the many silent final letters). Tap anything to hear it.",
             french_alphabet(),
         ),
+        "ru" => (
+            "Russian uses the Cyrillic alphabet — a new script, but a phonetic one: once you know the 33 letters, you can read almost anything. Start here, tapping each letter to hear it.",
+            russian_alphabet(),
+        ),
         _ => return None,
     };
     match language.as_str() {
@@ -1386,6 +1571,10 @@ pub fn pronunciation_guide(language: &LanguageCode) -> Option<PronunciationGuide
         "fr" => {
             entries.extend(french_numbers());
             entries.extend(french_sounds());
+        }
+        "ru" => {
+            entries.extend(russian_numbers());
+            entries.extend(russian_sounds());
         }
         _ => {}
     }
@@ -1587,6 +1776,59 @@ fn french_sounds() -> Vec<SoundEntry> {
     ]
 }
 
+fn russian_alphabet() -> Vec<SoundEntry> {
+    [
+        ("А", "a — as in 'father'"), ("Б", "b"), ("В", "v"), ("Г", "g"), ("Д", "d"),
+        ("Е", "ye — as in 'yes'"), ("Ё", "yo — as in 'yolk'"), ("Ж", "zh — like 's' in 'measure'"),
+        ("З", "z"), ("И", "ee"), ("Й", "y — a short 'y'"), ("К", "k"), ("Л", "l"), ("М", "m"),
+        ("Н", "n"), ("О", "o"), ("П", "p"), ("Р", "r — rolled"), ("С", "s"), ("Т", "t"),
+        ("У", "oo"), ("Ф", "f"), ("Х", "kh — a raspy 'h'"), ("Ц", "ts"), ("Ч", "ch"),
+        ("Ш", "sh"), ("Щ", "shch — a softer, longer sh"), ("Ъ", "hard sign — silent"),
+        ("Ы", "y — a hard, deep 'i'"), ("Ь", "soft sign — softens the letter before it"),
+        ("Э", "e — as in 'met'"), ("Ю", "yu — as in 'you'"), ("Я", "ya"),
+    ]
+    .iter()
+    .map(|(c, n)| letter(c, n))
+    .collect()
+}
+
+fn russian_numbers() -> Vec<SoundEntry> {
+    let rn = |digit: &str, word: &str, roman: &str, gloss: &str| SoundEntry {
+        category: "Numbers".into(),
+        symbol: digit.into(),
+        sound: roman.into(),
+        say: Some(word.into()),
+        example: word.into(),
+        example_gloss: gloss.into(),
+    };
+    vec![
+        rn("0", "ноль", "nol'", "zero"),
+        rn("1", "один", "odin", "one"),
+        rn("2", "два", "dva", "two"),
+        rn("3", "три", "tri", "three"),
+        rn("4", "четыре", "chetyre", "four"),
+        rn("5", "пять", "pyat'", "five"),
+        rn("6", "шесть", "shest'", "six"),
+        rn("7", "семь", "sem'", "seven"),
+        rn("8", "восемь", "vosem'", "eight"),
+        rn("9", "девять", "devyat'", "nine"),
+        rn("10", "десять", "desyat'", "ten"),
+    ]
+}
+
+fn russian_sounds() -> Vec<SoundEntry> {
+    vec![
+        sound("Sounds to know", "ж", "like 's' in 'measure'", "женщина", "woman"),
+        sound("Sounds to know", "х", "a raspy 'h' from the throat", "хлеб", "bread"),
+        sound("Sounds to know", "ц", "like 'ts' in 'cats'", "отец", "father"),
+        sound("Sounds to know", "ч", "like 'ch' in 'chair'", "чай", "tea"),
+        sound("Sounds to know", "ш", "like English 'sh'", "школа", "school"),
+        sound("Sounds to know", "р", "a rolled 'r'", "работа", "work"),
+        sound("Sounds to know", "ы", "a hard 'i', deep in the mouth", "ты", "you"),
+        rule("Stress", "о", "an unstressed о sounds like 'a' (stress is unpredictable)", "молоко", "milk"),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1600,6 +1842,7 @@ mod tests {
             ("es", ES_FREQUENCY, 0, spanish_units as UnitsFn, spanish_packs as PacksFn),
             ("fr", FR_FREQUENCY, 1000, french_units, french_packs),
             ("de", DE_FREQUENCY, 2000, german_units, german_packs),
+            ("ru", RU_FREQUENCY, 3000, russian_units, russian_packs),
         ]
     }
 

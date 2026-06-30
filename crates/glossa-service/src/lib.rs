@@ -352,6 +352,8 @@ pub struct UnitWord {
     pub lemma: String,
     pub pos: PartOfSpeech,
     pub gloss: Option<String>,
+    /// Latin-script romanization, for non-Latin scripts (None otherwise).
+    pub transliteration: Option<String>,
     pub status: TokenStatus,
 }
 
@@ -635,6 +637,7 @@ pub async fn unit_lesson(
             lemma: l.lemma.clone(),
             pos: l.pos,
             gloss: l.gloss.clone(),
+            transliteration: l.transliteration.clone(),
             status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
         })
         .collect();
@@ -982,6 +985,7 @@ pub async fn pack_lesson(
             lemma: l.lemma.clone(),
             pos: l.pos,
             gloss: l.gloss.clone(),
+            transliteration: l.transliteration.clone(),
             status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
         })
         .collect();
@@ -1199,6 +1203,7 @@ pub async fn add_deck_word(
         pos,
         frequency_rank: 0, // user words carry no frequency — kept out of selection
         gloss: (!gloss.is_empty()).then_some(gloss),
+        transliteration: None,
     };
     store.upsert_user_lexemes(&[lex]).await?;
     deck.lexemes.push(id);
@@ -1250,6 +1255,7 @@ pub async fn deck_lesson(
             lemma: l.lemma.clone(),
             pos: l.pos,
             gloss: l.gloss.clone(),
+            transliteration: l.transliteration.clone(),
             status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
         })
         .collect();
@@ -2036,7 +2042,10 @@ fn build_exercise(
             ex("Pick the word", gloss, options, idx, lemma, Vec::new())
         }
         ExerciseKind::TypeAnswer => {
-            let accepts = accepts_for(&lemma);
+            let mut accepts = accepts_for(&lemma);
+            if let Some(t) = &target.transliteration {
+                accepts.extend(accepts_for(t)); // accept the romanization too
+            }
             ex("Type the word", gloss, Vec::new(), 0, lemma, accepts)
         }
         // Listening kinds: no text prompt — the learner hears `answer` (the
@@ -2046,7 +2055,10 @@ fn build_exercise(
             ex("Listen and pick the meaning", String::new(), options, idx, lemma, Vec::new())
         }
         ExerciseKind::ListenType => {
-            let accepts = accepts_for(&lemma);
+            let mut accepts = accepts_for(&lemma);
+            if let Some(t) = &target.transliteration {
+                accepts.extend(accepts_for(t));
+            }
             ex("Listen and type the word", String::new(), Vec::new(), 0, lemma, accepts)
         }
     }
@@ -2190,6 +2202,7 @@ mod tests {
             pos: PartOfSpeech::Noun,
             frequency_rank: rank,
             gloss: Some(format!("{lemma}-en")),
+            transliteration: None,
         }
     }
 

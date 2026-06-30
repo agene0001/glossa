@@ -121,6 +121,7 @@ mod tests {
             pos: PartOfSpeech::Noun,
             frequency_rank: id as u32,
             gloss: Some(format!("gloss-{lemma}")),
+            transliteration: None,
         }
     }
 
