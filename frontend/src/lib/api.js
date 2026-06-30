@@ -79,6 +79,18 @@ export const api = {
 	/** Switch the active target language (e.g. "fr"). */
 	setTargetLanguage: (code) => invoke('set_target_language', { code }),
 
+	// --- grammar track ---
+
+	/** Grammar lessons with mastery + prerequisite lock state. */
+	grammarTrack: () => invoke('grammar_track'),
+
+	/** One grammar lesson: explanation + drills. */
+	grammarLesson: (patternId) => invoke('grammar_lesson', { patternId }),
+
+	/** Record a grammar drill answer for a pattern. */
+	recordGrammarExercise: (patternId, correct) =>
+		invoke('record_grammar_exercise', { patternId, correct }),
+
 	// --- review / spaced-repetition quiz ---
 
 	/** A spaced-repetition review session (weakest words first). */

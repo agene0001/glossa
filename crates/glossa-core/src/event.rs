@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ids::LexemeId;
+use crate::ids::{LexemeId, PatternId};
 
 /// Something the learner did that carries an acquisition signal.
 ///
@@ -28,4 +28,6 @@ pub enum LearningEvent {
     },
     /// An explicit exercise answer (correct/incorrect).
     ExerciseAnswered { lexeme_id: LexemeId, correct: bool },
+    /// An explicit grammar drill answer (correct/incorrect).
+    GrammarExerciseAnswered { pattern_id: PatternId, correct: bool },
 }

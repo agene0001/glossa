@@ -272,8 +272,11 @@ mod tests {
                 id: PatternId(1),
                 language: LanguageCode::spanish(),
                 label: "preterite-regular-ar".into(),
+                title: String::new(),
                 example_template: "Ayer ___é ...".into(),
                 explanation: None,
+                prerequisites: Vec::new(),
+                drills: Vec::new(),
             }),
             known_ratio: 0.95,
         };

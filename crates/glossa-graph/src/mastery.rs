@@ -147,6 +147,24 @@ pub fn apply_grammar_exposure(
     state
 }
 
+/// Record an explicit grammar drill result for this pattern.
+pub fn apply_grammar_exercise(
+    mut state: GrammarState,
+    correct: bool,
+    now: DateTime<Utc>,
+    cfg: &MasteryConfig,
+) -> GrammarState {
+    let delta = if correct {
+        cfg.correct_gain
+    } else {
+        -cfg.incorrect_penalty
+    };
+    state.mastery = advance(state.mastery, state.last_seen_at, now, delta, cfg);
+    state.exposure_count = state.exposure_count.saturating_add(1);
+    state.last_seen_at = Some(now);
+    state
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

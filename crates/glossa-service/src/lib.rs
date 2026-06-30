@@ -13,11 +13,13 @@ use uuid::Uuid;
 
 use glossa_content::ContentGenerator;
 use glossa_core::{
-    ContentRequest, ContentResponse, Deck, DeckId, LanguageCode, LearnerId, LearnerProfile, Lexeme,
-    LexemeId, LexemeState, MasteryState, PartOfSpeech, Token, TokenStatus, Unit, WordInfo,
+    ContentRequest, ContentResponse, Deck, DeckId, GrammarState, LanguageCode, LearnerId,
+    LearnerProfile, Lexeme, LexemeId, LexemeState, MasteryState, PartOfSpeech, PatternId, Token,
+    TokenStatus, Unit, WordInfo,
 };
 use glossa_graph::mastery::{
-    apply_grammar_exposure, apply_lexeme_exercise, apply_lexeme_exposure, effective_mastery,
+    apply_grammar_exercise, apply_grammar_exposure, apply_lexeme_exercise, apply_lexeme_exposure,
+    effective_mastery,
 };
 use rand::seq::SliceRandom;
 use rand::{Rng, RngExt};
@@ -1305,6 +1307,209 @@ pub async fn deck_quiz(
         .collect())
 }
 
+// --- grammar track -------------------------------------------------------
+
+/// A grammar lesson as shown in the track: mastery + whether it's unlocked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrammarTrackItem {
+    pub id: i64,
+    pub title: String,
+    pub label: String,
+    pub explanation: Option<String>,
+    pub drill_count: usize,
+    /// The learner's mastery of this pattern (known / partial / unknown).
+    pub status: TokenStatus,
+    /// Locked (prereq unmet) / Active / Done — reuses the roadmap's states.
+    pub state: UnitState,
+    /// Titles of the patterns that gate this one (for a "needs X first" hint).
+    pub locked_on: Vec<String>,
+}
+
+/// One drill, ready for the frontend (answer accepted leniently via `accepts`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DrillItem {
+    pub prompt: String,
+    pub answer: String,
+    pub translation: String,
+    pub accepts: Vec<String>,
+}
+
+/// The full lesson for one grammar pattern: explain it, then drill it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrammarLesson {
+    pub id: i64,
+    pub title: String,
+    pub label: String,
+    pub explanation: Option<String>,
+    pub example: String,
+    pub drills: Vec<DrillItem>,
+    pub status: TokenStatus,
+}
+
+/// The Grammar track: every pattern with mastery + prerequisite lock state.
+/// Grammar is its own track (parallel to the Course): you learn a rule and
+/// apply it to words you already know, gated by the rules it depends on.
+pub async fn grammar_track(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<Vec<GrammarTrackItem>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let mut patterns = store.grammar_patterns(&language).await?;
+    patterns.sort_by_key(|p| p.id);
+    let states = store.grammar_states(learner_id).await?;
+    let now = Utc::now();
+
+    let title_of: HashMap<PatternId, String> = patterns
+        .iter()
+        .map(|p| (p.id, lesson_title(p)))
+        .collect();
+    let mastery_of = |pid: PatternId| -> MasteryState {
+        states
+            .iter()
+            .find(|s| s.pattern_id == pid)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+            .unwrap_or(MasteryState::Unknown)
+    };
+
+    Ok(patterns
+        .iter()
+        .map(|p| {
+            let m = mastery_of(p.id);
+            // A prereq counts as met once it's at least Partial (begun), so the
+            // track doesn't hard-block on perfection.
+            let unmet: Vec<String> = p
+                .prerequisites
+                .iter()
+                .filter(|pid| mastery_of(**pid).is_unknown())
+                .filter_map(|pid| title_of.get(pid).cloned())
+                .collect();
+            let state = if !unmet.is_empty() {
+                UnitState::Locked
+            } else if m.is_known() {
+                UnitState::Done
+            } else {
+                UnitState::Active
+            };
+            GrammarTrackItem {
+                id: p.id.0,
+                title: lesson_title(p),
+                label: p.label.clone(),
+                explanation: p.explanation.clone(),
+                drill_count: p.drills.len(),
+                status: mastery_to_token(m),
+                state,
+                locked_on: unmet,
+            }
+        })
+        .collect())
+}
+
+/// The lesson for one grammar pattern: explanation + drills (with lenient
+/// accepted answers computed for typed checking).
+pub async fn grammar_lesson(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    pattern_id: i64,
+) -> Result<GrammarLesson> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let pattern = store
+        .grammar_patterns(&language)
+        .await?
+        .into_iter()
+        .find(|p| p.id.0 == pattern_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("pattern {pattern_id}")))?;
+
+    let now = Utc::now();
+    let m = store
+        .grammar_states(learner_id)
+        .await?
+        .into_iter()
+        .find(|s| s.pattern_id == pattern.id)
+        .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+        .unwrap_or(MasteryState::Unknown);
+
+    let drills = pattern
+        .drills
+        .iter()
+        .map(|dr| DrillItem {
+            prompt: dr.prompt.clone(),
+            answer: dr.answer.clone(),
+            translation: dr.translation.clone(),
+            accepts: accepts_for(&dr.answer),
+        })
+        .collect();
+
+    Ok(GrammarLesson {
+        id: pattern.id.0,
+        title: lesson_title(&pattern),
+        label: pattern.label.clone(),
+        explanation: pattern.explanation.clone(),
+        example: pattern.example_template.clone(),
+        drills,
+        status: mastery_to_token(m),
+    })
+}
+
+/// Record a grammar drill answer: folds it into the pattern's mastery (the same
+/// model as vocabulary) and logs the event.
+pub async fn record_grammar_exercise(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    pattern_id: i64,
+    correct: bool,
+) -> Result<ExerciseResult> {
+    let id = PatternId(pattern_id);
+    let now = Utc::now();
+    let current = store
+        .grammar_states(learner_id)
+        .await?
+        .into_iter()
+        .find(|s| s.pattern_id == id)
+        .unwrap_or_else(|| GrammarState::unseen(id));
+    let updated = apply_grammar_exercise(current, correct, now, &cfg.mastery);
+    store.upsert_grammar_states(learner_id, &[updated.clone()]).await?;
+    store
+        .append_event(
+            learner_id,
+            &glossa_core::LearningEvent::GrammarExerciseAnswered {
+                pattern_id: id,
+                correct,
+            },
+        )
+        .await?;
+
+    let streak = compute_streak(&store.activity_dates(learner_id).await?, now);
+    let status = mastery_to_token(effective_mastery(
+        updated.mastery,
+        updated.last_seen_at,
+        now,
+        &cfg.mastery,
+    ));
+    Ok(ExerciseResult { status, streak })
+}
+
+/// A learner-facing title for a pattern, falling back to the label if unset.
+fn lesson_title(p: &glossa_core::GrammarPattern) -> String {
+    if p.title.trim().is_empty() {
+        p.label.clone()
+    } else {
+        p.title.clone()
+    }
+}
+
 // --- review / spaced-repetition quiz -------------------------------------
 
 /// What the learner is asked to do for one exercise. Recognition kinds are
@@ -1424,6 +1629,18 @@ pub async fn review_session(
     Ok(items)
 }
 
+/// Normalized acceptable forms of a typed answer: lowercased/trimmed, plus a
+/// diacritic-folded variant when it differs. The frontend folds the same way.
+fn accepts_for(answer: &str) -> Vec<String> {
+    let n = answer.trim().to_lowercase();
+    let folded = fold_diacritics(&n);
+    if folded == n {
+        vec![n]
+    } else {
+        vec![n, folded]
+    }
+}
+
 /// Fold common Spanish/French/German diacritics to ASCII, so typed answers are
 /// matched leniently ("cafe" == "café", "uben" == "üben").
 fn fold_diacritics(s: &str) -> String {
@@ -1521,9 +1738,7 @@ fn build_exercise(
             mc(gloss, lemma, opts, "Pick the word")
         }
         ExerciseKind::TypeAnswer => {
-            let n = lemma.trim().to_lowercase();
-            let folded = fold_diacritics(&n);
-            let accepts = if folded == n { vec![n] } else { vec![n, folded] };
+            let accepts = accepts_for(&lemma);
             Exercise {
                 lexeme_id: target.id.0,
                 kind,
@@ -1883,6 +2098,56 @@ mod tests {
         delete_deck(&store, learner.id, deck.id).await.unwrap();
         assert!(list_decks(&store, &cfg, learner.id).await.unwrap().is_empty());
         assert!(store.user_lexemes(&LanguageCode::spanish()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn grammar_track_gates_and_drills() {
+        use glossa_core::{GrammarDrill, GrammarPattern};
+        let store = FileStore::ephemeral().unwrap();
+        let cfg = GraphConfig::default();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+        let pat = |n: i64, title: &str, prereqs: Vec<PatternId>| GrammarPattern {
+            id: PatternId(n),
+            language: LanguageCode::spanish(),
+            label: format!("p{n}"),
+            title: title.into(),
+            example_template: "ex".into(),
+            explanation: Some("explain".into()),
+            prerequisites: prereqs,
+            drills: vec![GrammarDrill {
+                prompt: "Yo ___ español. (hablar)".into(),
+                answer: "hablo".into(),
+                translation: "I speak Spanish.".into(),
+            }],
+        };
+        store
+            .upsert_grammar_patterns(&[pat(1, "Basics", vec![]), pat(2, "Advanced", vec![PatternId(1)])])
+            .await
+            .unwrap();
+
+        // Fresh: lesson 1 active, lesson 2 locked on lesson 1.
+        let track = grammar_track(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(track.len(), 2);
+        assert_eq!(track[0].state, UnitState::Active);
+        assert_eq!(track[1].state, UnitState::Locked);
+        assert_eq!(track[1].locked_on, vec!["Basics".to_string()]);
+
+        // The lesson carries drills with lenient accepted answers.
+        let lesson = grammar_lesson(&store, &cfg, learner.id, 1).await.unwrap();
+        assert_eq!(lesson.drills.len(), 1);
+        assert_eq!(lesson.drills[0].answer, "hablo");
+        assert!(lesson.drills[0].accepts.contains(&"hablo".to_string()));
+
+        // Drilling lesson 1 right several times unlocks lesson 2.
+        for _ in 0..6 {
+            record_grammar_exercise(&store, &cfg, learner.id, 1, true)
+                .await
+                .unwrap();
+        }
+        let track2 = grammar_track(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(track2[1].state, UnitState::Active, "prereq met → unlocked");
     }
 
     #[tokio::test]

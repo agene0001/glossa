@@ -291,6 +291,39 @@ async fn deck_quiz(
 }
 
 #[tauri::command]
+async fn grammar_track(
+    state: State<'_, AppState>,
+) -> Result<Vec<service::GrammarTrackItem>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::grammar_track(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn grammar_lesson(
+    state: State<'_, AppState>,
+    pattern_id: i64,
+) -> Result<service::GrammarLesson, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::grammar_lesson(store.as_ref(), &cfg, learner, pattern_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn record_grammar_exercise(
+    state: State<'_, AppState>,
+    pattern_id: i64,
+    correct: bool,
+) -> Result<service::ExerciseResult, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::record_grammar_exercise(store.as_ref(), &cfg, learner, pattern_id, correct)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn review_session(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -379,6 +412,9 @@ pub fn run() {
             remove_deck_word,
             deck_lesson,
             deck_quiz,
+            grammar_track,
+            grammar_lesson,
+            record_grammar_exercise,
             available_languages,
             set_target_language,
             review_session,

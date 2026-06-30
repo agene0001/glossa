@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use glossa_core::{
-    ExampleSentence, GrammarPattern, LanguageCode, Lexeme, LexemeId, PackId, PartOfSpeech,
-    PatternId, ReadingPassage, Unit, UnitId, VocabPack,
+    ExampleSentence, GrammarDrill, GrammarPattern, LanguageCode, Lexeme, LexemeId, PackId,
+    PartOfSpeech, PatternId, ReadingPassage, Unit, UnitId, VocabPack,
 };
 use glossa_storage::{StorageError, Store};
 
@@ -95,26 +95,70 @@ async fn seed_language(
 // --- Spanish -------------------------------------------------------------
 
 fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
-    let p = |n: i64, label: &str, ex: &str, expl: &str| GrammarPattern {
+    let d = |prompt: &str, answer: &str, tr: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+    };
+    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
+        title: title.into(),
         example_template: ex.into(),
         explanation: Some(expl.into()),
+        prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        drills,
     };
     vec![
-        p(1, "gender-articles", "el libro, la casa, los niños, las mesas",
-          "Spanish nouns are masculine or feminine. Use 'el/un' with masculine nouns and 'la/una' with feminine ones; in the plural they become 'los/las'."),
-        p(2, "present-regular-ar", "yo hablo, tú hablas, ella habla",
-          "Regular -ar verbs drop -ar and add endings: -o (I), -as (you), -a (he/she). E.g. hablar → hablo, hablas, habla."),
-        p(3, "present-regular-er-ir", "yo como, tú comes, ella vive",
-          "Regular -er/-ir verbs use the endings -o, -es, -e. E.g. comer → como, comes, come."),
-        p(4, "ser-vs-estar", "Soy estudiante. Estoy en casa.",
-          "Spanish has two verbs for 'to be': 'ser' for identity and lasting traits, 'estar' for location and temporary states."),
-        p(5, "plural-nouns", "un gato, dos gatos; una flor, tres flores",
-          "Make nouns plural by adding -s after a vowel (gato → gatos) or -es after a consonant (flor → flores)."),
-        p(6, "preterite-regular-ar", "Ayer hablé y compré pan.",
-          "For completed past actions with -ar verbs, use the preterite: hablé (I spoke), hablaste (you spoke), habló (he/she spoke)."),
+        p(1, "gender-articles", "Gender & articles (el / la)", "el libro, la casa, los niños, las mesas",
+          "Spanish nouns are masculine or feminine. Use 'el/un' with masculine nouns and 'la/una' with feminine ones; in the plural they become 'los/las'.",
+          &[], vec![
+            d("___ libro es nuevo. (the, m.)", "el", "The book is new."),
+            d("___ casa es grande. (the, f.)", "la", "The house is big."),
+            d("Es ___ amigo. (a, m.)", "un", "He is a friend."),
+            d("Es ___ mesa. (a, f.)", "una", "It is a table."),
+          ]),
+        p(2, "present-regular-ar", "Present tense: -ar verbs", "yo hablo, tú hablas, ella habla",
+          "Regular -ar verbs drop -ar and add endings: -o (I), -as (you), -a (he/she). E.g. hablar → hablo, hablas, habla.",
+          &[], vec![
+            d("Yo ___ español. (hablar)", "hablo", "I speak Spanish."),
+            d("Ella ___ en la ciudad. (trabajar)", "trabaja", "She works in the city."),
+            d("Nosotros ___ pan. (comprar)", "compramos", "We buy bread."),
+            d("Tú ___ mucho. (hablar)", "hablas", "You speak a lot."),
+          ]),
+        p(3, "present-regular-er-ir", "Present tense: -er / -ir verbs", "yo como, tú comes, ella vive",
+          "Regular -er/-ir verbs use the endings -o, -es, -e. E.g. comer → como, comes, come.",
+          &[2], vec![
+            d("Yo ___ pan. (comer)", "como", "I eat bread."),
+            d("Ella ___ leche. (beber)", "bebe", "She drinks milk."),
+            d("Nosotros ___ aquí. (vivir)", "vivimos", "We live here."),
+            d("Tú ___ una manzana. (comer)", "comes", "You eat an apple."),
+          ]),
+        p(4, "ser-vs-estar", "To be: ser vs estar", "Soy estudiante. Estoy en casa.",
+          "Spanish has two verbs for 'to be': 'ser' for identity and lasting traits, 'estar' for location and temporary states.",
+          &[2], vec![
+            d("Yo ___ estudiante. (ser)", "soy", "I am a student."),
+            d("Ella ___ en casa. (estar)", "está", "She is at home."),
+            d("Nosotros ___ amigos. (ser)", "somos", "We are friends."),
+            d("Yo ___ feliz hoy. (estar)", "estoy", "I am happy today."),
+          ]),
+        p(5, "plural-nouns", "Making nouns plural", "un gato, dos gatos; una flor, tres flores",
+          "Make nouns plural by adding -s after a vowel (gato → gatos) or -es after a consonant (flor → flores).",
+          &[1], vec![
+            d("un gato, dos ___ (gato)", "gatos", "one cat, two cats"),
+            d("una flor, tres ___ (flor)", "flores", "one flower, three flowers"),
+            d("un libro, dos ___ (libro)", "libros", "one book, two books"),
+            d("una vez, dos ___ (vez)", "veces", "one time, two times"),
+          ]),
+        p(6, "preterite-regular-ar", "The past tense (-ar verbs)", "Ayer hablé y compré pan.",
+          "For completed past actions with -ar verbs, use the preterite: hablé (I spoke), hablaste (you spoke), habló (he/she spoke).",
+          &[2], vec![
+            d("Ayer yo ___ con un amigo. (hablar)", "hablé", "Yesterday I spoke with a friend."),
+            d("Ella ___ en la ciudad. (trabajar)", "trabajó", "She worked in the city."),
+            d("Yo ___ pan ayer. (comprar)", "compré", "I bought bread yesterday."),
+            d("Tú ___ mucho. (trabajar)", "trabajaste", "You worked a lot."),
+          ]),
     ]
 }
 
@@ -394,24 +438,62 @@ fn spanish_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexem
 // --- French --------------------------------------------------------------
 
 fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
-    let p = |n: i64, label: &str, ex: &str, expl: &str| GrammarPattern {
+    let d = |prompt: &str, answer: &str, tr: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+    };
+    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
+        title: title.into(),
         example_template: ex.into(),
         explanation: Some(expl.into()),
+        prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        drills,
     };
     vec![
-        p(1, "articles-le-la", "le livre, la maison; un, une",
-          "French nouns are masculine or feminine. 'le/un' go with masculine nouns, 'la/une' with feminine ones."),
-        p(2, "present-er-verbs", "je parle, tu parles, il parle",
-          "Regular -er verbs drop -er and add -e, -es, -e: parler → je parle, tu parles, il parle."),
-        p(3, "etre-avoir", "je suis, j'ai",
-          "Two essential irregular verbs: être (to be) → je suis, tu es, il est; avoir (to have) → j'ai, tu as, il a."),
-        p(4, "negation-ne-pas", "je ne parle pas",
-          "To make a sentence negative, wrap the verb with ne ... pas: je parle → je ne parle pas."),
-        p(5, "plural-s", "un livre, deux livres",
-          "Most French nouns add a (usually silent) -s in the plural: un livre → deux livres."),
+        p(1, "articles-le-la", "Gender & articles (le / la)", "le livre, la maison; un, une",
+          "French nouns are masculine or feminine. 'le/un' go with masculine nouns, 'la/une' with feminine ones.",
+          &[], vec![
+            d("___ livre est sur la table. (the, m.)", "le", "The book is on the table."),
+            d("___ maison est grande. (the, f.)", "la", "The house is big."),
+            d("C'est ___ ami. (a, m.)", "un", "He is a friend."),
+            d("C'est ___ pomme. (a, f.)", "une", "It's an apple."),
+          ]),
+        p(2, "present-er-verbs", "Present tense: -er verbs", "je parle, tu parles, il parle",
+          "Regular -er verbs drop -er and add -e, -es, -e: parler → je parle, tu parles, il parle.",
+          &[], vec![
+            d("Je ___ français. (parler)", "parle", "I speak French."),
+            d("Elle ___ en ville. (travailler)", "travaille", "She works in the city."),
+            d("Nous ___ du pain. (manger)", "mangeons", "We eat bread."),
+            d("Tu ___ beaucoup. (parler)", "parles", "You speak a lot."),
+          ]),
+        p(3, "etre-avoir", "To be & to have (être, avoir)", "je suis, j'ai",
+          "Two essential irregular verbs: être (to be) → je suis, tu es, il est; avoir (to have) → j'ai, tu as, il a.",
+          &[], vec![
+            d("Je ___ un ami. (être)", "suis", "I am a friend."),
+            d("Tu ___ une maison. (avoir)", "as", "You have a house."),
+            d("Il ___ content. (être)", "est", "He is happy."),
+            d("Nous ___ un chat. (avoir)", "avons", "We have a cat."),
+          ]),
+        p(4, "negation-ne-pas", "Negation (ne … pas)", "je ne parle pas",
+          "To make a sentence negative, wrap the verb with ne ... pas: je parle → je ne parle pas.",
+          &[2], vec![
+            d("Je ne ___ pas français. (parler)", "parle", "I do not speak French."),
+            d("Il ne ___ pas. (manger)", "mange", "He does not eat."),
+            d("Nous ne ___ pas. (travailler)", "travaillons", "We do not work."),
+            d("Tu ne ___ pas. (boire)", "bois", "You do not drink."),
+          ]),
+        p(5, "plural-s", "Making nouns plural", "un livre, deux livres",
+          "Most French nouns add a (usually silent) -s in the plural: un livre → deux livres.",
+          &[1], vec![
+            d("un livre, deux ___ (livre)", "livres", "one book, two books"),
+            d("un chat, trois ___ (chat)", "chats", "one cat, three cats"),
+            d("une porte, deux ___ (porte)", "portes", "two doors"),
+            d("un ami, deux ___ (ami)", "amis", "two friends"),
+          ]),
     ]
 }
 

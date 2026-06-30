@@ -23,6 +23,18 @@ pub struct Lexeme {
     pub gloss: Option<String>,
 }
 
+/// One grammar drill: a sentence with a blank to fill, its answer, and a
+/// translation. The dedicated Grammar track tests a pattern with these.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrammarDrill {
+    /// The cue, with `___` marking the blank, e.g. `"Yo ___ español. (hablar)"`.
+    pub prompt: String,
+    /// The expected fill, e.g. `"hablo"`.
+    pub answer: String,
+    /// A native-language translation of the completed sentence.
+    pub translation: String,
+}
+
 /// A grammar pattern tracked as a first-class node, exactly like vocabulary
 /// (spec §2.2). `example_template` seeds the LLM prompt when this pattern is
 /// the deliberate target for a piece of content.
@@ -33,9 +45,18 @@ pub struct GrammarPattern {
     /// Machine-ish label, e.g. `"preterite-regular-ar"`. Never shown as a
     /// mandatory rule gate — only as opt-in support once it has recurred.
     pub label: String,
+    /// Learner-facing title for the Grammar track, e.g. "The past tense (-ar)".
+    #[serde(default)]
+    pub title: String,
     pub example_template: String,
     /// Optional learner-facing explanation, shown as a tip inside a unit lesson
     /// (spec §2.2: surfaced only as opt-in support, never a gate).
     #[serde(default)]
     pub explanation: Option<String>,
+    /// Patterns that must be learned first — gates this lesson in the track.
+    #[serde(default)]
+    pub prerequisites: Vec<PatternId>,
+    /// Drills that test this pattern in the Grammar track.
+    #[serde(default)]
+    pub drills: Vec<GrammarDrill>,
 }

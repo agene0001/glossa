@@ -27,7 +27,7 @@ pub use event::LearningEvent;
 pub use ids::{DeckId, LearnerId, LexemeId, PackId, PatternId, UnitId};
 pub use lang::{LanguageCode, PartOfSpeech};
 pub use learner::LearnerProfile;
-pub use lexeme::{GrammarPattern, Lexeme};
+pub use lexeme::{GrammarDrill, GrammarPattern, Lexeme};
 pub use mastery::{GrammarState, LexemeState, MasteryState};
 pub use pack::VocabPack;
 pub use unit::{ExampleSentence, ReadingPassage, Unit};
