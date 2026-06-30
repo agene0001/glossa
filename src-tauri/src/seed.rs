@@ -25,6 +25,7 @@ struct SeedWord {
 
 const ES_FREQUENCY: &str = include_str!("../seed/es_frequency.json");
 const FR_FREQUENCY: &str = include_str!("../seed/fr_frequency.json");
+const DE_FREQUENCY: &str = include_str!("../seed/de_frequency.json");
 
 /// Sync every supported language's inventory from its bundled seed on launch.
 /// Idempotent: ids are assigned by list order, so re-running updates existing
@@ -48,6 +49,16 @@ pub async fn sync_inventory(store: &dyn Store) -> Result<(), StorageError> {
         french_grammar,
         french_units,
         french_packs,
+    )
+    .await?;
+    seed_language(
+        store,
+        &LanguageCode::new("de"),
+        2000,
+        DE_FREQUENCY,
+        german_grammar,
+        german_units,
+        german_packs,
     )
     .await?;
     Ok(())
@@ -628,13 +639,276 @@ fn french_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
     ]
 }
 
+// --- German --------------------------------------------------------------
+
+fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
+    let d = |prompt: &str, answer: &str, tr: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+    };
+    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
+        id: PatternId(base + n),
+        language: language.clone(),
+        label: label.into(),
+        title: title.into(),
+        example_template: ex.into(),
+        explanation: Some(expl.into()),
+        prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        drills,
+    };
+    vec![
+        p(1, "articles-der-die-das", "Gender & articles (der / die / das)", "der Mann, die Frau, das Kind",
+          "German nouns are masculine, feminine, or neuter. 'the' is der (m.), die (f.), or das (n.); 'a' is ein (m./n.) or eine (f.).",
+          &[], vec![
+            d("___ Mann ist groß. (the, m.)", "der", "The man is tall."),
+            d("___ Frau ist hier. (the, f.)", "die", "The woman is here."),
+            d("___ Kind spielt. (the, n.)", "das", "The child plays."),
+            d("Das ist ___ Haus. (a, n.)", "ein", "That is a house."),
+          ]),
+        p(2, "present-tense", "Present tense", "ich mache, du machst, er macht",
+          "Regular verbs drop -en and add endings: -e (ich), -st (du), -t (er/sie/es), -en (wir/sie). E.g. machen → mache, machst, macht.",
+          &[], vec![
+            d("Ich ___ Deutsch. (lernen)", "lerne", "I learn German."),
+            d("Du ___ Wasser. (trinken)", "trinkst", "You drink water."),
+            d("Er ___ Brot. (essen)", "isst", "He eats bread."),
+            d("Wir ___ in der Stadt. (wohnen)", "wohnen", "We live in the city."),
+          ]),
+        p(3, "sein-haben", "To be & to have (sein, haben)", "ich bin, ich habe",
+          "Two essential irregular verbs: sein (to be) → ich bin, du bist, er ist; haben (to have) → ich habe, du hast, er hat.",
+          &[], vec![
+            d("Ich ___ müde. (sein)", "bin", "I am tired."),
+            d("Du ___ einen Hund. (haben)", "hast", "You have a dog."),
+            d("Sie ___ eine Frau. (sein)", "ist", "She is a woman."),
+            d("Wir ___ Zeit. (haben)", "haben", "We have time."),
+          ]),
+        p(4, "plural-nouns", "Plural nouns", "der Hund → die Hunde, das Kind → die Kinder",
+          "German plurals are irregular — endings include -e, -er, -en, -s, or none, often with an umlaut. They're learned per noun rather than by a single rule.",
+          &[1], vec![
+            d("ein Hund, zwei ___ (Hund)", "Hunde", "one dog, two dogs"),
+            d("ein Kind, drei ___ (Kind)", "Kinder", "one child, three children"),
+            d("ein Auto, zwei ___ (Auto)", "Autos", "two cars"),
+            d("eine Frau, zwei ___ (Frau)", "Frauen", "two women"),
+          ]),
+        p(5, "negation-nicht-kein", "Negation (nicht / kein)", "Ich bin nicht müde. Das ist kein Hund.",
+          "Use 'nicht' to negate a verb or adjective, and 'kein/keine' to negate a noun (it replaces ein/eine): kein Hund, keine Zeit.",
+          &[2], vec![
+            d("Ich bin ___ müde. (not)", "nicht", "I am not tired."),
+            d("Das ist ___ Hund. (not a, m.)", "kein", "That is not a dog."),
+            d("Ich spreche ___ Deutsch. (not)", "nicht", "I do not speak German."),
+            d("Er hat ___ Zeit. (no, f.)", "keine", "He has no time."),
+          ]),
+        p(6, "word-order-v2", "Word order (verb second)", "Heute lerne ich Deutsch.",
+          "The conjugated verb is always the second element. If a sentence starts with a time or place word, the subject moves after the verb: Heute lerne ich (not 'Heute ich lerne').",
+          &[2], vec![
+            d("Heute ___ ich Deutsch. (lernen)", "lerne", "Today I learn German."),
+            d("Morgen ___ wir nach Berlin. (fahren)", "fahren", "Tomorrow we drive to Berlin."),
+            d("Jetzt ___ er Kaffee. (trinken)", "trinkt", "Now he drinks coffee."),
+            d("Hier ___ ich. (arbeiten)", "arbeite", "Here I work."),
+          ]),
+    ]
+}
+
+fn german_units(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<Unit> {
+    let resolve = |lemmas: &[&str]| -> Vec<LexemeId> {
+        lemmas.iter().filter_map(|w| ids.get(*w).copied()).collect()
+    };
+    let ex = |t: &str, tr: &str| ExampleSentence {
+        text: t.into(),
+        translation: tr.into(),
+    };
+    let rd = |title: &str, text: &str, tr: &str| {
+        Some(ReadingPassage {
+            title: title.into(),
+            text: text.into(),
+            translation: tr.into(),
+        })
+    };
+    #[allow(clippy::too_many_arguments)]
+    let unit = |n: i64,
+                level: &str,
+                title: &str,
+                objective: &str,
+                desc: &str,
+                words: &[&str],
+                pat: Option<i64>,
+                reading: Option<ReadingPassage>,
+                examples: Vec<ExampleSentence>| Unit {
+        id: UnitId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        description: desc.into(),
+        level: level.into(),
+        objective: objective.into(),
+        target_lexemes: resolve(words),
+        target_pattern: pat.map(|n| PatternId(base + n)),
+        reading,
+        examples,
+    };
+    vec![
+        unit(1, "A1.1", "First Words & Greetings",
+            "Greet people, say thank you, and introduce yourself.",
+            "Say hello, talk about yourself, and meet the verb sein (to be).",
+            &["hallo", "danke", "bitte", "ich", "du", "sein", "ja", "nein", "und", "Freund"], Some(3),
+            rd("Zwei Freunde",
+                "— Hallo! Ich bin Anna. — Hallo, Anna. Bist du meine Freundin? — Ja! Du und ich sind Freunde. — Danke!",
+                "— Hello! I am Anna. — Hello, Anna. Are you my friend? — Yes! You and I are friends. — Thank you!"),
+            vec![
+                ex("Hallo! Ich bin ein Freund.", "Hello! I am a friend."),
+                ex("Danke, Freund.", "Thank you, friend."),
+                ex("Du und ich.", "You and I."),
+                ex("Ja oder nein?", "Yes or no?"),
+            ]),
+        unit(2, "A1.1", "People & Family",
+            "Name the people in a family and use der / die / das.",
+            "People around you, and how German marks gender with der / die / das.",
+            &["Mann", "Frau", "Kind", "Familie", "Vater", "Mutter", "der", "die", "das"], Some(1),
+            rd("Annas Familie",
+                "Das ist Annas Familie. Der Vater ist ein Mann. Die Mutter ist eine Frau. Das Kind spielt im Garten. Es ist eine glückliche Familie!",
+                "This is Anna's family. The father is a man. The mother is a woman. The child plays in the garden. It is a happy family!"),
+            vec![
+                ex("Der Mann und die Frau.", "The man and the woman."),
+                ex("Die Familie: der Vater, die Mutter und das Kind.", "The family: the father, the mother and the child."),
+                ex("Der Vater ist ein Mann.", "The father is a man."),
+                ex("Die Mutter ist eine Frau.", "The mother is a woman."),
+            ]),
+        unit(3, "A1.1", "Home & Things",
+            "Name common things in a home.",
+            "Objects around the house, and a first look at plurals.",
+            &["Haus", "Tisch", "Tür", "Buch", "Wasser", "Hund", "Katze"], Some(4),
+            rd("Zu Hause",
+                "In meinem Haus gibt es viele Dinge. Auf dem Tisch ist ein Buch und ein Glas Wasser. Die Katze schläft an der Tür. Der Hund ist im Garten.",
+                "In my house there are many things. On the table is a book and a glass of water. The cat sleeps by the door. The dog is in the garden."),
+            vec![
+                ex("Das Haus hat eine Tür.", "The house has a door."),
+                ex("Das Buch ist auf dem Tisch.", "The book is on the table."),
+                ex("Ein Hund und eine Katze.", "A dog and a cat."),
+                ex("Das Wasser ist im Haus.", "The water is in the house."),
+            ]),
+        unit(4, "A1.1", "Eating & Drinking",
+            "Say what you eat and drink.",
+            "Food and drink, with the verbs essen and trinken.",
+            &["essen", "trinken", "Brot", "Milch", "Kaffee", "Apfel", "Essen"], Some(2),
+            rd("Das Frühstück",
+                "Am Morgen esse ich Brot mit einem Apfel. Meine Mutter trinkt Kaffee und mein Vater trinkt Milch. Das Essen ist einfach, aber gut.",
+                "In the morning I eat bread with an apple. My mother drinks coffee and my father drinks milk. The food is simple, but good."),
+            vec![
+                ex("Ich esse Brot.", "I eat bread."),
+                ex("Du trinkst Milch.", "You drink milk."),
+                ex("Er isst einen Apfel.", "He eats an apple."),
+                ex("Ich trinke Kaffee und Wasser.", "I drink coffee and water."),
+            ]),
+        unit(5, "A1.2", "Everyday Actions",
+            "Talk about everyday actions and say what you want to do.",
+            "Common things you do, with regular verbs and wollen (to want).",
+            &["machen", "gehen", "sprechen", "arbeiten", "kaufen", "wollen"], Some(2),
+            rd("Ein normaler Tag",
+                "Jeden Tag arbeite ich in der Stadt. Ich spreche mit meinen Freunden und mache viele Dinge. Dann gehe ich zum Markt und kaufe Brot. Am Abend will ich schlafen.",
+                "Every day I work in the city. I speak with my friends and do many things. Then I go to the market and buy bread. In the evening I want to sleep."),
+            vec![
+                ex("Ich spreche mit einem Freund.", "I speak with a friend."),
+                ex("Sie arbeitet in der Stadt.", "She works in the city."),
+                ex("Wir kaufen Brot.", "We buy bread."),
+                ex("Ich will essen.", "I want to eat."),
+            ]),
+        unit(6, "A1.1", "Numbers & Describing",
+            "Count to ten and describe things as big, small, good, or bad.",
+            "Numbers and common adjectives.",
+            &["eins", "zwei", "drei", "gut", "schlecht", "groß", "klein", "neu"], None,
+            rd("Drei Bücher",
+                "Ich habe drei neue Bücher. Eins ist groß und zwei sind klein. Das große Buch ist sehr gut. Das kleine ist nicht schlecht.",
+                "I have three new books. One is big and two are small. The big book is very good. The small one is not bad."),
+            vec![
+                ex("Eins, zwei, drei.", "One, two, three."),
+                ex("Ein neues Buch.", "A new book."),
+                ex("Das Haus ist groß.", "The house is big."),
+                ex("Der Kaffee ist gut.", "The coffee is good."),
+            ]),
+        unit(7, "A1.1", "Colors",
+            "Name colors and describe objects by their color.",
+            "Name colors to describe things.",
+            &["Farbe", "rot", "blau", "grün", "schwarz", "weiß", "gelb"], None,
+            rd("Die Farben",
+                "Meine Lieblingsfarbe ist blau. Ich habe eine schwarze Katze und einen weißen Hund. Im Garten gibt es rote und gelbe Blumen. Das Gras ist grün.",
+                "My favorite color is blue. I have a black cat and a white dog. In the garden there are red and yellow flowers. The grass is green."),
+            vec![
+                ex("Die schwarze Katze und der weiße Hund.", "The black cat and the white dog."),
+                ex("Ein rotes Haus.", "A red house."),
+                ex("Das Buch ist blau.", "The book is blue."),
+                ex("Die Farbe grün und die Farbe gelb.", "The color green and the color yellow."),
+            ]),
+        unit(8, "A1.2", "Time & Days",
+            "Talk about when things happen — today, tomorrow, now.",
+            "Talk about days and time, with German's verb-second word order.",
+            &["Tag", "Jahr", "Nacht", "heute", "morgen", "jetzt", "Stunde", "Zeit"], Some(6),
+            rd("Heute und morgen",
+                "Heute ist ein guter Tag. Jetzt arbeite ich, aber ich habe nicht viel Zeit. Morgen gehe ich in die Stadt. In der Nacht schlafe ich.",
+                "Today is a good day. Now I work, but I don't have much time. Tomorrow I go to the city. At night I sleep."),
+            vec![
+                ex("Heute ist ein guter Tag.", "Today is a good day."),
+                ex("Jetzt arbeite ich.", "Now I work."),
+                ex("Morgen gehe ich.", "Tomorrow I go."),
+                ex("Die Nacht und der Tag.", "The night and the day."),
+            ]),
+    ]
+}
+
+fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<VocabPack> {
+    let pack = |n: i64, emoji: &str, title: &str, desc: &str, words: &[&str]| VocabPack {
+        id: PackId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        emoji: emoji.into(),
+        description: desc.into(),
+        lexemes: words.iter().filter_map(|w| ids.get(*w).copied()).collect(),
+    };
+    vec![
+        pack(1, "🍽️", "Food & Drink", "Talk about food and drink.",
+            &["Brot", "Milch", "Kaffee", "Apfel", "Wasser", "Käse", "Ei", "Essen"]),
+        pack(2, "👨‍👩‍👧", "People & Family", "The people in your life.",
+            &["Mann", "Frau", "Kind", "Familie", "Vater", "Mutter", "Freund", "Freundin", "Mensch"]),
+        pack(3, "🏠", "Home & Things", "Things around the home.",
+            &["Haus", "Tisch", "Tür", "Buch", "Hund", "Katze", "Auto"]),
+        pack(4, "🗣️", "Handy Verbs", "Everyday verbs to get things done.",
+            &["machen", "gehen", "kommen", "sehen", "sprechen", "arbeiten", "kaufen", "lernen",
+              "brauchen", "helfen", "suchen", "verstehen", "lesen"]),
+        pack(5, "🎨", "Describing & Colors", "Describe how things are.",
+            &["gut", "schlecht", "groß", "klein", "neu", "alt", "schön", "glücklich",
+              "rot", "blau", "grün", "schwarz", "weiß", "gelb"]),
+        pack(6, "⏰", "Time & Days", "Talk about when things happen.",
+            &["Tag", "Jahr", "Nacht", "Stunde", "Zeit", "Woche", "heute", "morgen", "jetzt", "gestern"]),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    type UnitsFn = fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<Unit>;
+    type PacksFn = fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<VocabPack>;
+
+    /// (code, json, base, units_fn, packs_fn) for every seeded language.
+    fn languages() -> Vec<(&'static str, &'static str, i64, UnitsFn, PacksFn)> {
+        vec![
+            ("es", ES_FREQUENCY, 0, spanish_units as UnitsFn, spanish_packs as PacksFn),
+            ("fr", FR_FREQUENCY, 1000, french_units, french_packs),
+            ("de", DE_FREQUENCY, 2000, german_units, german_packs),
+        ]
+    }
+
+    /// Lemma → id map mirroring how `seed_language` assigns ids (by list order).
+    fn lemma_ids(json: &str, base: i64) -> HashMap<String, LexemeId> {
+        serde_json::from_str::<Vec<SeedWord>>(json)
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(i, w)| (w.lemma.clone(), LexemeId(base + i as i64 + 1)))
+            .collect()
+    }
+
     #[test]
     fn bundled_frequency_lists_are_valid() {
-        for json in [ES_FREQUENCY, FR_FREQUENCY] {
+        for (_, json, _, _, _) in languages() {
             let words: Vec<SeedWord> =
                 serde_json::from_str(json).expect("frequency json must deserialize");
             assert!(words.len() > 40, "seed list too small: {}", words.len());
@@ -645,39 +919,29 @@ mod tests {
     fn unit_targets_resolve_to_seeded_words() {
         // Every word referenced by a unit must exist in that language's list,
         // or progress over it would be impossible.
-        let es: Vec<SeedWord> = serde_json::from_str(ES_FREQUENCY).unwrap();
-        let es_ids: HashMap<String, LexemeId> = es
-            .iter()
-            .enumerate()
-            .map(|(i, w)| (w.lemma.clone(), LexemeId(i as i64 + 1)))
-            .collect();
-        for u in spanish_units(&LanguageCode::spanish(), 0, &es_ids) {
-            assert!(
-                !u.target_lexemes.is_empty(),
-                "unit '{}' resolved no target words",
-                u.title
-            );
+        for (code, json, base, units_fn, _) in languages() {
+            let lang = LanguageCode::new(code);
+            let ids = lemma_ids(json, base);
+            for u in units_fn(&lang, base, &ids) {
+                assert!(
+                    !u.target_lexemes.is_empty(),
+                    "{code} unit '{}' resolved no target words",
+                    u.title
+                );
+            }
         }
     }
 
     #[test]
     fn vocab_packs_resolve_to_seeded_words() {
         // Every pack must resolve most of its words, or it'd be a thin deck.
-        for (json, base, packs_fn) in [
-            (ES_FREQUENCY, 0i64, spanish_packs as fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<VocabPack>),
-            (FR_FREQUENCY, 1000, french_packs),
-        ] {
-            let words: Vec<SeedWord> = serde_json::from_str(json).unwrap();
-            let lang = LanguageCode::new(if base == 0 { "es" } else { "fr" });
-            let lemma_ids: HashMap<String, LexemeId> = words
-                .iter()
-                .enumerate()
-                .map(|(i, w)| (w.lemma.clone(), LexemeId(base + i as i64 + 1)))
-                .collect();
-            for p in packs_fn(&lang, base, &lemma_ids) {
+        for (code, json, base, _, packs_fn) in languages() {
+            let lang = LanguageCode::new(code);
+            let ids = lemma_ids(json, base);
+            for p in packs_fn(&lang, base, &ids) {
                 assert!(
                     p.lexemes.len() >= 5,
-                    "pack '{}' only resolved {} words",
+                    "{code} pack '{}' only resolved {} words",
                     p.title,
                     p.lexemes.len()
                 );

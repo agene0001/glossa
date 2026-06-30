@@ -66,6 +66,15 @@ const FR_PRONOUNS: [(&str, &str); 5] = [
     ("ils/elles", "they"),
 ];
 
+/// German subject pronouns, same ordering.
+const DE_PRONOUNS: [(&str, &str); 5] = [
+    ("ich", "I"),
+    ("du", "you"),
+    ("er/sie/es", "he/she/it"),
+    ("wir", "we"),
+    ("sie", "they"),
+];
+
 /// The present-tense conjugation of a verb lexeme, one row per pronoun. Empty
 /// for non-verbs or languages/verbs we don't model — callers just skip it.
 pub fn present_tense(lex: &Lexeme) -> Vec<Conjugation> {
@@ -76,6 +85,7 @@ pub fn present_tense(lex: &Lexeme) -> Vec<Conjugation> {
     let (forms, pronouns) = match lex.language.as_str() {
         "es" => (spanish_present(&lemma), &ES_PRONOUNS),
         "fr" => (french_present(&lemma), &FR_PRONOUNS),
+        "de" => (german_present(&lemma), &DE_PRONOUNS),
         _ => return Vec::new(),
     };
     match forms {
@@ -182,6 +192,7 @@ pub fn surface_forms(lex: &Lexeme) -> Vec<String> {
     match lex.language.as_str() {
         "es" => spanish_forms(&lemma, lex.pos, &mut forms),
         "fr" => french_forms(&lemma, lex.pos, &mut forms),
+        "de" => german_forms(&lemma, lex.pos, &mut forms),
         _ => {}
     }
     forms.retain(|f| !f.is_empty());
@@ -350,6 +361,80 @@ fn french_irregular(lemma: &str) -> Option<&'static [&'static str]> {
     Some(forms)
 }
 
+// --- German --------------------------------------------------------------
+
+/// The present-tense verb stem: drop the infinitive `-en` (or trailing `-n`).
+fn german_stem(lemma: &str) -> &str {
+    if let Some(s) = lemma.strip_suffix("en") {
+        s
+    } else if let Some(s) = lemma.strip_suffix('n') {
+        s
+    } else {
+        lemma
+    }
+}
+
+/// Present-tense forms [ich, du, er, wir, sie] for a German verb.
+fn german_present(lemma: &str) -> Option<[String; 5]> {
+    if let Some(forms) = german_present_irregular(lemma) {
+        return Some(forms.map(String::from));
+    }
+    let stem = german_stem(lemma);
+    // du/er pick up an extra -e after t/d (arbeitest); a sibilant stem collapses
+    // the du -st to -t (du reist, not reisst).
+    let du = if stem.ends_with(['s', 'ß', 'z', 'x']) {
+        format!("{stem}t")
+    } else if stem.ends_with(['t', 'd']) {
+        format!("{stem}est")
+    } else {
+        format!("{stem}st")
+    };
+    let er = if stem.ends_with(['t', 'd']) {
+        format!("{stem}et")
+    } else {
+        format!("{stem}t")
+    };
+    Some([format!("{stem}e"), du, er, lemma.to_string(), lemma.to_string()])
+}
+
+/// Curated present tense for high-frequency irregular German verbs (stem
+/// changes and the modals).
+fn german_present_irregular(lemma: &str) -> Option<[&'static str; 5]> {
+    Some(match lemma {
+        "sein" => ["bin", "bist", "ist", "sind", "sind"],
+        "haben" => ["habe", "hast", "hat", "haben", "haben"],
+        "werden" => ["werde", "wirst", "wird", "werden", "werden"],
+        "können" => ["kann", "kannst", "kann", "können", "können"],
+        "wollen" => ["will", "willst", "will", "wollen", "wollen"],
+        "müssen" => ["muss", "musst", "muss", "müssen", "müssen"],
+        "essen" => ["esse", "isst", "isst", "essen", "essen"],
+        "sprechen" => ["spreche", "sprichst", "spricht", "sprechen", "sprechen"],
+        "fahren" => ["fahre", "fährst", "fährt", "fahren", "fahren"],
+        "helfen" => ["helfe", "hilfst", "hilft", "helfen", "helfen"],
+        "sehen" => ["sehe", "siehst", "sieht", "sehen", "sehen"],
+        "lesen" => ["lese", "liest", "liest", "lesen", "lesen"],
+        "nehmen" => ["nehme", "nimmst", "nimmt", "nehmen", "nehmen"],
+        "geben" => ["gebe", "gibst", "gibt", "geben", "geben"],
+        _ => return None,
+    })
+}
+
+/// Surface forms for one German lexeme. Verbs get their present tense (plus a
+/// regular past participle); nouns/adjectives keep just the lemma — German
+/// plurals and declensions are too irregular to generate reliably.
+fn german_forms(lemma: &str, pos: PartOfSpeech, forms: &mut Vec<String>) {
+    if pos == PartOfSpeech::Verb {
+        if let Some(present) = german_present(lemma) {
+            forms.extend(present);
+        }
+        // Regular weak past participle: ge- + stem + -t (gemacht, gelernt).
+        if german_present_irregular(lemma).is_none() {
+            let stem = german_stem(lemma);
+            forms.push(format!("ge{stem}t"));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,6 +478,30 @@ mod tests {
         assert_eq!(hit("busqué"), Some(LexemeId(4))); // -car spelling change
         assert_eq!(hit("gatos"), Some(LexemeId(5)));
         assert_eq!(hit("veces"), Some(LexemeId(6))); // -z → -ces plural
+    }
+
+    #[test]
+    fn german_present_and_forms() {
+        // Regular: machen → mache/machst/macht/machen/machen, + past participle.
+        let machen = lex(1, "de", "machen", PartOfSpeech::Verb);
+        let forms: Vec<_> = present_tense(&machen).into_iter().map(|c| c.form).collect();
+        assert_eq!(forms, ["mache", "machst", "macht", "machen", "machen"]);
+        assert_eq!(present_tense(&machen)[0].pronoun, "ich");
+        let idx = build_form_index(&[machen.clone()]);
+        assert_eq!(idx.get("macht"), Some(&LexemeId(1)));
+        assert_eq!(idx.get("gemacht"), Some(&LexemeId(1)), "past participle resolves");
+
+        // -t stem takes an epenthetic -e: arbeiten → du arbeitest, er arbeitet.
+        let arbeiten = lex(2, "de", "arbeiten", PartOfSpeech::Verb);
+        let af: Vec<_> = present_tense(&arbeiten).into_iter().map(|c| c.form).collect();
+        assert_eq!(af, ["arbeite", "arbeitest", "arbeitet", "arbeiten", "arbeiten"]);
+
+        // Irregular sein resolves and conjugates.
+        let sein = lex(3, "de", "sein", PartOfSpeech::Verb);
+        assert_eq!(present_tense(&sein)[2].form, "ist");
+        let sidx = build_form_index(&[sein]);
+        assert_eq!(sidx.get("bin"), Some(&LexemeId(3)));
+        assert_eq!(sidx.get("ist"), Some(&LexemeId(3)));
     }
 
     #[test]

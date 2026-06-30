@@ -2,7 +2,7 @@
 // No backend, no API cost — uses the OS's installed voices. (Provider-based
 // TTS/STT for conversation is a separate Phase-3 concern in glossa-voice.)
 
-const LANG_BCP47 = { es: 'es-ES', fr: 'fr-FR', en: 'en-US' };
+const LANG_BCP47 = { es: 'es-ES', fr: 'fr-FR', de: 'de-DE', en: 'en-US' };
 
 // Isolated single-letter words get read as letter *names* by the TTS engine
 // ("y" → "i griega" / "why" instead of the conjunction /i/). Respell the few
