@@ -4,6 +4,7 @@
 	// function that returns the quiz items; everything else is generic.
 	import { api } from '$lib/api.js';
 	import { speak } from '$lib/audio.js';
+	import { posLabel } from '$lib/pos.js';
 	import Exercise from '$lib/Exercise.svelte';
 
 	let { lesson, loadQuiz, lang = 'es', onExit, exitLabel = 'Done →' } = $props();
@@ -91,6 +92,7 @@
 				onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flip()}>
 				{#if !flipped}
 					<div class="fc-word">{card.lemma}</div>
+					{#if posLabel(card.pos)}<div class="fc-pos">{posLabel(card.pos)}</div>{/if}
 					<div class="fc-hint">tap to reveal meaning</div>
 				{:else}
 					<div class="fc-gloss">{card.gloss ?? 'no meaning on file'}</div>
@@ -197,6 +199,13 @@
 	.fc-hint {
 		font-size: 0.8rem;
 		color: var(--muted);
+	}
+	.fc-pos {
+		font-size: 0.72rem;
+		color: var(--muted);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 0.1rem 0.5rem;
 	}
 	.nav {
 		display: flex;

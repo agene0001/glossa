@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api.js';
 	import { speak } from '$lib/audio.js';
+	import { posLabel } from '$lib/pos.js';
 
 	let { unitId, live = false, lang = 'es', onBack } = $props();
 
@@ -200,7 +201,7 @@
 				<div class="vocab">
 					{#each lesson.words as w (w.lexeme_id)}
 						<button class="vchip {w.status}" title="Listen" onclick={() => speak(w.lemma, lang)}>
-							<strong>{w.lemma}</strong>{#if w.gloss} — {w.gloss}{/if} <span class="spk">🔊</span>
+							<strong>{w.lemma}</strong>{#if posLabel(w.pos)}<span class="pos-tag">{posLabel(w.pos)}</span>{/if}{#if w.gloss} — {w.gloss}{/if} <span class="spk">🔊</span>
 						</button>
 					{/each}
 				</div>
@@ -366,6 +367,16 @@
 		background: var(--panel-2);
 		border: 1px solid var(--border);
 		color: var(--muted);
+	}
+	.pos-tag {
+		font-size: 0.62rem;
+		font-weight: 600;
+		color: var(--muted);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 0.03rem 0.32rem;
+		margin: 0 0.1rem 0 0.35rem;
+		vertical-align: middle;
 	}
 	.stepper {
 		list-style: none;

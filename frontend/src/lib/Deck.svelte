@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api.js';
 	import { speak } from '$lib/audio.js';
+	import { posLabel, POS_OPTIONS } from '$lib/pos.js';
 	import StudyQuiz from '$lib/StudyQuiz.svelte';
 
 	let { deckId, lang = 'es', live = false, onBack } = $props();
@@ -14,6 +15,7 @@
 
 	let newLemma = $state('');
 	let newGloss = $state('');
+	let newPos = $state('');
 
 	// "Add from English" state.
 	let aiQuery = $state('');
@@ -21,27 +23,6 @@
 	let aiAdding = $state(false);
 	let aiError = $state('');
 	let suggestions = $state([]);
-
-	// Group the deck's words by part of speech for the list.
-	const POS_GROUPS = [
-		{ key: 'noun', label: 'Nouns' },
-		{ key: 'verb', label: 'Verbs' },
-		{ key: 'adjective', label: 'Adjectives' },
-		{ key: 'adverb', label: 'Adverbs' }
-	];
-	let grouped = $derived.by(() => {
-		if (!lesson) return [];
-		const known = new Set(POS_GROUPS.map((g) => g.key));
-		const out = [];
-		for (const g of POS_GROUPS) {
-			const words = lesson.cards.filter((w) => w.pos === g.key);
-			if (words.length) out.push({ label: g.label, words });
-		}
-		const other = lesson.cards.filter((w) => !known.has(w.pos));
-		if (other.length) out.push({ label: out.length ? 'Other' : 'Words', words: other });
-		return out;
-	});
-	let showGroupHeadings = $derived(grouped.length > 1);
 
 	async function load() {
 		error = '';
@@ -60,9 +41,10 @@
 		if (!lemma || busy) return;
 		busy = true;
 		try {
-			await api.addDeckWord(deckId, lemma, newGloss.trim());
+			await api.addDeckWord(deckId, lemma, newGloss.trim(), newPos || null);
 			newLemma = '';
 			newGloss = '';
+			newPos = '';
 			await load();
 		} catch (e) {
 			error = String(e);
@@ -198,6 +180,9 @@
 					bind:value={newGloss}
 					onkeydown={onKey}
 					disabled={busy} />
+				<select class="pos-select" bind:value={newPos} disabled={busy} aria-label="word type">
+					{#each POS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
 				<button class="primary" onclick={addWord} disabled={busy || !newLemma.trim()}>Add</button>
 			</div>
 			<p class="muted" style="margin-top: 0.5rem; font-size: 0.82rem;">
@@ -214,19 +199,17 @@
 			{#if lesson.cards.length === 0}
 				<p class="muted" style="margin-top: 0.8rem;">No words yet — add your first above.</p>
 			{:else}
-				{#each grouped as g (g.label)}
-					{#if showGroupHeadings}<div class="group-label">{g.label}</div>{/if}
-					<ul class="words">
-						{#each g.words as w (w.lexeme_id)}
-							<li class="word {w.status}">
-								<button class="iconbtn" title="Listen" onclick={() => speak(w.lemma, lang)}>🔊</button>
-								<span class="w-lemma">{w.lemma}</span>
-								<span class="w-gloss">{w.gloss ?? '—'}</span>
-								<button class="del" title="Remove" onclick={() => removeWord(w.lexeme_id)} disabled={busy}>✕</button>
-							</li>
-						{/each}
-					</ul>
-				{/each}
+				<ul class="words">
+					{#each lesson.cards as w (w.lexeme_id)}
+						<li class="word {w.status}">
+							<button class="iconbtn" title="Listen" onclick={() => speak(w.lemma, lang)}>🔊</button>
+							<span class="w-lemma">{w.lemma}</span>
+							{#if posLabel(w.pos)}<span class="pos-tag">{posLabel(w.pos)}</span>{/if}
+							<span class="w-gloss">{w.gloss ?? '—'}</span>
+							<button class="del" title="Remove" onclick={() => removeWord(w.lexeme_id)} disabled={busy}>✕</button>
+						</li>
+					{/each}
+				</ul>
 			{/if}
 		</div>
 	{/if}
@@ -285,17 +268,17 @@
 		font-size: 0.85rem;
 		padding: 0.3rem 0.7rem;
 	}
-	.group-label {
-		font-size: 0.72rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--muted);
-		font-weight: 700;
-		margin-top: 1rem;
+	.pos-select {
+		padding: 0.6rem 0.5rem;
+		border-radius: 9px;
+		border: 1px solid var(--border);
+		background: var(--panel-2);
+		color: var(--text);
+		font: inherit;
 	}
 	.words {
 		list-style: none;
-		margin: 0.5rem 0 0;
+		margin: 0.8rem 0 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
@@ -318,6 +301,16 @@
 	}
 	.w-lemma {
 		font-weight: 600;
+	}
+	.pos-tag {
+		font-size: 0.68rem;
+		font-weight: 600;
+		text-transform: lowercase;
+		color: var(--muted);
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 0.05rem 0.4rem;
 	}
 	.w-gloss {
 		color: var(--muted);
