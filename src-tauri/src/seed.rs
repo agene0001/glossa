@@ -1737,11 +1737,18 @@ fn rule(category: &str, symbol: &str, how: &str, example: &str, gloss: &str) -> 
 /// letter name is the same, but a lone *uppercase* letter makes TTS announce
 /// the capitalization first ("Großbuchstabe A" / "capital A").
 fn letter(symbol: &str, name: &str) -> SoundEntry {
+    letter_say(symbol, name, &symbol.to_lowercase())
+}
+
+/// An alphabet letter whose tap pronounces a custom string rather than the bare
+/// glyph — e.g. an umlaut, where a lone "ä" makes TTS read its name, but "äh"
+/// (vowel + silent h, a normal German spelling) voices the actual long vowel.
+fn letter_say(symbol: &str, name: &str, say: &str) -> SoundEntry {
     SoundEntry {
         category: "Alphabet".into(),
         symbol: symbol.into(),
         sound: name.into(),
-        say: Some(symbol.to_lowercase()),
+        say: Some(say.into()),
         example: String::new(),
         example_gloss: String::new(),
     }
@@ -1770,12 +1777,13 @@ fn german_alphabet() -> Vec<SoundEntry> {
     .iter()
     .map(|(c, n)| letter(c, n))
     .collect();
-    // Umlauts + ß as their own letters (tap to hear the letter). The vowel
-    // sound, demonstrated by an example word, lives in the Sounds view.
-    v.push(letter("Ä", "a-Umlaut"));
-    v.push(letter("Ö", "o-Umlaut"));
-    v.push(letter("Ü", "u-Umlaut"));
-    v.push(letter("ß", "Eszett (sharp s)"));
+    // Umlauts: tap to hear the vowel sound. A bare "ä" makes TTS say its name,
+    // so we feed it "äh" (vowel + silent lengthening h) to voice the long vowel.
+    v.push(letter_say("Ä", "ä — like 'e' in 'bed'", "äh"));
+    v.push(letter_say("Ö", "ö — like 'i' in 'bird', rounded", "öh"));
+    v.push(letter_say("Ü", "ü — 'ee' with rounded lips", "üh"));
+    // ß has no sound of its own beyond a sharp 's'.
+    v.push(letter_say("ß", "ß — a sharp 's' (= ss)", "ss"));
     v
 }
 
