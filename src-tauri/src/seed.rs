@@ -1747,20 +1747,6 @@ fn letter(symbol: &str, name: &str) -> SoundEntry {
     }
 }
 
-/// An alphabet letter demonstrated by an example word rather than a symbol tap —
-/// for letters TTS won't voice as a sound in isolation (umlauts read their name
-/// "a-Umlaut"; ß reads "scharfes s"). The example word makes the sound audible.
-fn letter_example(symbol: &str, desc: &str, example: &str, gloss: &str) -> SoundEntry {
-    SoundEntry {
-        category: "Alphabet".into(),
-        symbol: symbol.into(),
-        sound: desc.into(),
-        say: None,
-        example: example.into(),
-        example_gloss: gloss.into(),
-    }
-}
-
 /// One number: the digit, the spoken word, and the English meaning.
 fn number(digit: &str, word: &str, gloss: &str) -> SoundEntry {
     SoundEntry {
@@ -1784,12 +1770,12 @@ fn german_alphabet() -> Vec<SoundEntry> {
     .iter()
     .map(|(c, n)| letter(c, n))
     .collect();
-    // Umlauts + ß: tapping the bare letter makes TTS say its name, so show the
-    // sound via an example word instead.
-    v.push(letter_example("Ä", "like 'e' in 'bed'", "Mädchen", "girl"));
-    v.push(letter_example("Ö", "like 'i' in 'bird', with rounded lips", "schön", "beautiful"));
-    v.push(letter_example("Ü", "say 'ee' with rounded lips", "über", "over"));
-    v.push(letter_example("ß", "a sharp 's' — never starts a word", "Straße", "street"));
+    // Umlauts + ß as their own letters (tap to hear the letter). The vowel
+    // sound, demonstrated by an example word, lives in the Sounds view.
+    v.push(letter("Ä", "a-Umlaut"));
+    v.push(letter("Ö", "o-Umlaut"));
+    v.push(letter("Ü", "u-Umlaut"));
+    v.push(letter("ß", "Eszett (sharp s)"));
     v
 }
 
