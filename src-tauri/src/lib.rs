@@ -13,7 +13,9 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Manager, State};
 
-use glossa_content::{AnthropicContentGenerator, ContentGenerator, MockContentGenerator};
+use glossa_content::{
+    AnthropicContentGenerator, ContentGenerator, MockContentGenerator, OfflineDictionary,
+};
 use glossa_core::{ContentResponse, LanguageCode, LearnerId, LexemeId, MasteryState};
 use glossa_graph::{GraphConfig, GraphOverview};
 use glossa_service as service;
@@ -23,6 +25,8 @@ use glossa_storage::{FileStore, Store};
 struct AppState {
     store: Arc<dyn Store>,
     generator: Arc<dyn ContentGenerator>,
+    /// Offline English→target dictionary for the "add words by English" flow.
+    dictionary: Arc<OfflineDictionary>,
     cfg: GraphConfig,
     learner_id: LearnerId,
     /// "anthropic" if a real API key is configured, else "mock".
@@ -249,9 +253,10 @@ async fn add_deck_word(
     deck_id: i64,
     lemma: String,
     gloss: String,
+    pos: Option<String>,
 ) -> Result<(), String> {
     let (store, learner) = (state.store.clone(), state.learner_id);
-    service::add_deck_word(store.as_ref(), learner, deck_id, lemma, gloss)
+    service::add_deck_word(store.as_ref(), learner, deck_id, lemma, gloss, pos)
         .await
         .map_err(|e| e.to_string())
 }
@@ -297,11 +302,22 @@ async fn suggest_words(
     query: String,
     count: Option<usize>,
 ) -> Result<Vec<service::WordSuggestion>, String> {
-    let (store, generator, learner) =
-        (state.store.clone(), state.generator.clone(), state.learner_id);
-    service::suggest_words(store.as_ref(), generator.as_ref(), learner, query, count.unwrap_or(0))
-        .await
-        .map_err(|e| e.to_string())
+    let (store, dictionary, generator, learner) = (
+        state.store.clone(),
+        state.dictionary.clone(),
+        state.generator.clone(),
+        state.learner_id,
+    );
+    service::suggest_words(
+        store.as_ref(),
+        dictionary.as_ref(),
+        generator.as_ref(),
+        learner,
+        query,
+        count.unwrap_or(0),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -405,9 +421,16 @@ pub fn run() {
                     None => (Arc::new(MockContentGenerator), "mock"),
                 };
 
+            // Offline English→target dictionary — translates without an API key.
+            let mut dict = OfflineDictionary::new();
+            dict.load("es", include_str!("../seed/es_dictionary.json"))?;
+            dict.load("fr", include_str!("../seed/fr_dictionary.json"))?;
+            dict.load("de", include_str!("../seed/de_dictionary.json"))?;
+
             app.manage(AppState {
                 store,
                 generator,
+                dictionary: Arc::new(dict),
                 cfg: GraphConfig::default(),
                 learner_id: learner.id,
                 generator_kind,

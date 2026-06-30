@@ -16,6 +16,8 @@ mod mock;
 pub use anthropic::{AnthropicContentGenerator, DEFAULT_MODEL};
 pub use mock::MockContentGenerator;
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +42,87 @@ pub struct SuggestedWord {
     /// A short meaning in the learner's native language.
     pub gloss: String,
     pub pos: Option<PartOfSpeech>,
+}
+
+/// One row of a bundled offline dictionary file.
+#[derive(Debug, Clone, Deserialize)]
+struct DictEntry {
+    en: String,
+    term: String,
+    pos: String,
+}
+
+/// An offline English → target-language dictionary, loaded from bundled JSON.
+/// Backs the "add words by English" flow with no API key — translation only;
+/// topic generation still needs the LLM.
+#[derive(Default)]
+pub struct OfflineDictionary {
+    by_lang: HashMap<String, HashMap<String, Vec<SuggestedWord>>>,
+}
+
+impl OfflineDictionary {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Load one language's dictionary from its bundled JSON.
+    pub fn load(&mut self, lang: &str, json: &str) -> Result<()> {
+        let entries: Vec<DictEntry> =
+            serde_json::from_str(json).map_err(|e| ContentError::Parse(e.to_string()))?;
+        let map = self.by_lang.entry(lang.to_string()).or_default();
+        for e in entries {
+            let word = SuggestedWord {
+                term: e.term,
+                gloss: e.en.clone(),
+                pos: pos_from_str(&e.pos),
+            };
+            map.entry(normalize_en(&e.en)).or_default().push(word);
+        }
+        Ok(())
+    }
+
+    /// Translate the English input (a word, or a comma-separated list) into any
+    /// matching target-language words. Empty when nothing matches.
+    pub fn lookup(&self, lang: &str, query: &str) -> Vec<SuggestedWord> {
+        let Some(map) = self.by_lang.get(lang) else {
+            return Vec::new();
+        };
+        let mut out: Vec<SuggestedWord> = Vec::new();
+        for part in query.split(',') {
+            if let Some(hits) = map.get(&normalize_en(part)) {
+                for h in hits {
+                    if !out.contains(h) {
+                        out.push(h.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Normalize an English key for matching: lowercase, trim, drop a leading "to ".
+fn normalize_en(s: &str) -> String {
+    let s = s.trim().to_lowercase();
+    s.strip_prefix("to ").unwrap_or(&s).trim().to_string()
+}
+
+/// Parse a part-of-speech string (snake_case) into [`PartOfSpeech`].
+pub fn pos_from_str(s: &str) -> Option<PartOfSpeech> {
+    Some(match s.trim().to_lowercase().as_str() {
+        "noun" => PartOfSpeech::Noun,
+        "verb" => PartOfSpeech::Verb,
+        "adjective" => PartOfSpeech::Adjective,
+        "adverb" => PartOfSpeech::Adverb,
+        "pronoun" => PartOfSpeech::Pronoun,
+        "preposition" => PartOfSpeech::Preposition,
+        "conjunction" => PartOfSpeech::Conjunction,
+        "determiner" => PartOfSpeech::Determiner,
+        "numeral" => PartOfSpeech::Numeral,
+        "interjection" => PartOfSpeech::Interjection,
+        "other" => PartOfSpeech::Other,
+        _ => return None,
+    })
 }
 
 /// Errors a generator can raise.

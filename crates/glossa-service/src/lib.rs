@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use glossa_content::{ContentGenerator, VocabRequest};
+use glossa_content::{ContentGenerator, OfflineDictionary, VocabRequest};
 use glossa_core::{
     ContentRequest, ContentResponse, Deck, DeckId, GrammarState, LanguageCode, LearnerId,
     LearnerProfile, Lexeme, LexemeId, LexemeState, MasteryState, PartOfSpeech, PatternId, Token,
@@ -1170,13 +1170,16 @@ pub async fn delete_deck(store: &dyn Store, learner_id: LearnerId, deck_id: i64)
     Ok(())
 }
 
-/// Add a word (term + meaning) to a deck, minting a user lexeme for it.
+/// Add a word (term + meaning) to a deck, minting a user lexeme for it. `pos`
+/// is an optional part-of-speech tag (from the dictionary/AI), used to group the
+/// deck by word type; manual adds without one are tagged `Other`.
 pub async fn add_deck_word(
     store: &dyn Store,
     learner_id: LearnerId,
     deck_id: i64,
     lemma: String,
     gloss: String,
+    pos: Option<String>,
 ) -> Result<()> {
     let mut deck = owned_deck(store, learner_id, deck_id).await?;
     let lemma = lemma.trim().to_string();
@@ -1184,12 +1187,16 @@ pub async fn add_deck_word(
         return Err(ServiceError::NotFound("a word is required".into()));
     }
     let gloss = gloss.trim().to_string();
+    let pos = pos
+        .as_deref()
+        .and_then(glossa_content::pos_from_str)
+        .unwrap_or(PartOfSpeech::Other);
     let id = LexemeId(store.reserve_user_lexeme_id().await?);
     let lex = Lexeme {
         id,
         language: deck.language.clone(),
         lemma,
-        pos: PartOfSpeech::Other,
+        pos,
         frequency_rank: 0, // user words carry no frequency — kept out of selection
         gloss: (!gloss.is_empty()).then_some(gloss),
     };
@@ -1325,9 +1332,13 @@ pub struct WordSuggestion {
 /// Translate the learner's English input into target-language vocabulary (or
 /// suggest a themed set when `count > 0`), for them to add to a deck. Read-only
 /// — nothing is saved until the learner adds a word via [`add_deck_word`].
-/// Requires the AI generator; the offline mock returns a config error.
+///
+/// The offline dictionary handles single-word translation with no API key;
+/// anything it doesn't cover (and every topic set) falls back to the AI
+/// generator, which the offline mock reports as a config error.
 pub async fn suggest_words(
     store: &dyn Store,
+    dictionary: &OfflineDictionary,
     generator: &dyn ContentGenerator,
     learner_id: LearnerId,
     query: String,
@@ -1337,22 +1348,33 @@ pub async fn suggest_words(
         .get_learner(learner_id)
         .await?
         .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
 
+    // Exact-word translation: try the offline dictionary first (no API key).
+    if count == 0 {
+        let hits = dictionary.lookup(language.as_str(), &query);
+        if !hits.is_empty() {
+            return Ok(hits.into_iter().map(word_suggestion).collect());
+        }
+    }
+
+    // Topic sets, or words the dictionary doesn't have, need the AI generator.
     let request = VocabRequest {
-        language: profile.target_language,
+        language,
         native_language: profile.native_language,
         query,
         count,
     };
     let words = generator.suggest_vocab(&request).await?;
-    Ok(words
-        .into_iter()
-        .map(|w| WordSuggestion {
-            term: w.term,
-            gloss: w.gloss,
-            pos: w.pos.map(|p| p.to_string()).unwrap_or_default(),
-        })
-        .collect())
+    Ok(words.into_iter().map(word_suggestion).collect())
+}
+
+fn word_suggestion(w: glossa_content::SuggestedWord) -> WordSuggestion {
+    WordSuggestion {
+        term: w.term,
+        gloss: w.gloss,
+        pos: w.pos.map(|p| p.to_string()).unwrap_or_default(),
+    }
 }
 
 // --- grammar track -------------------------------------------------------
@@ -2297,10 +2319,10 @@ mod tests {
         let deck = create_deck(&store, learner.id, "German class".into(), "🇩🇪".into())
             .await
             .unwrap();
-        add_deck_word(&store, learner.id, deck.id, "perro".into(), "dog".into())
+        add_deck_word(&store, learner.id, deck.id, "perro".into(), "dog".into(), Some("noun".into()))
             .await
             .unwrap();
-        add_deck_word(&store, learner.id, deck.id, "gato".into(), "cat".into())
+        add_deck_word(&store, learner.id, deck.id, "gato".into(), "cat".into(), None)
             .await
             .unwrap();
 

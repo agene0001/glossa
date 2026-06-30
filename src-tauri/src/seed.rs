@@ -1151,6 +1151,18 @@ mod tests {
     }
 
     #[test]
+    fn bundled_dictionaries_load_and_translate() {
+        let mut d = glossa_content::OfflineDictionary::new();
+        d.load("es", include_str!("../seed/es_dictionary.json")).unwrap();
+        d.load("fr", include_str!("../seed/fr_dictionary.json")).unwrap();
+        d.load("de", include_str!("../seed/de_dictionary.json")).unwrap();
+        assert_eq!(d.lookup("de", "dog")[0].term, "der Hund");
+        assert_eq!(d.lookup("es", "house")[0].term, "la casa");
+        assert!(!d.lookup("fr", "to eat").is_empty());
+        assert!(d.lookup("de", "asdfqwer").is_empty());
+    }
+
+    #[test]
     fn unit_targets_resolve_to_seeded_words() {
         // Every word referenced by a unit must exist in that language's list,
         // or progress over it would be impossible.

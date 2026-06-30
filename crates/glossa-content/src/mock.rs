@@ -124,6 +124,28 @@ mod tests {
         }
     }
 
+    #[test]
+    fn offline_dictionary_translates_and_normalizes() {
+        use crate::OfflineDictionary;
+        let json = r#"[
+            {"en":"dog","term":"der Hund","pos":"noun"},
+            {"en":"to eat","term":"essen","pos":"verb"}
+        ]"#;
+        let mut d = OfflineDictionary::new();
+        d.load("de", json).unwrap();
+
+        // Plain word, and "to eat" matches "eat" (leading "to " is stripped).
+        assert_eq!(d.lookup("de", "dog")[0].term, "der Hund");
+        assert_eq!(d.lookup("de", "DOG ")[0].term, "der Hund"); // case/trim
+        assert_eq!(d.lookup("de", "eat")[0].term, "essen");
+        assert_eq!(d.lookup("de", "to eat")[0].term, "essen");
+        // A comma list returns each match.
+        assert_eq!(d.lookup("de", "dog, eat").len(), 2);
+        // Misses and unknown languages are empty.
+        assert!(d.lookup("de", "umbrella").is_empty());
+        assert!(d.lookup("fr", "dog").is_empty());
+    }
+
     #[tokio::test]
     async fn mock_introduces_new_words_and_reports_them() {
         let req = ContentRequest {

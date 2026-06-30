@@ -59,8 +59,9 @@ export const api = {
 	/** Delete a deck and the words that belonged only to it. */
 	deleteDeck: (deckId) => invoke('delete_deck', { deckId }),
 
-	/** Add a word (term + meaning) to a deck. */
-	addDeckWord: (deckId, lemma, gloss) => invoke('add_deck_word', { deckId, lemma, gloss }),
+	/** Add a word (term + meaning, optional part of speech) to a deck. */
+	addDeckWord: (deckId, lemma, gloss, pos = null) =>
+		invoke('add_deck_word', { deckId, lemma, gloss, pos }),
 
 	/** Remove a word from a deck. */
 	removeDeckWord: (deckId, lexemeId) => invoke('remove_deck_word', { deckId, lexemeId }),

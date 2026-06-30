@@ -15,12 +15,33 @@
 	let newLemma = $state('');
 	let newGloss = $state('');
 
-	// "Add from English" (AI) state.
+	// "Add from English" state.
 	let aiQuery = $state('');
 	let aiBusy = $state(false);
 	let aiAdding = $state(false);
 	let aiError = $state('');
 	let suggestions = $state([]);
+
+	// Group the deck's words by part of speech for the list.
+	const POS_GROUPS = [
+		{ key: 'noun', label: 'Nouns' },
+		{ key: 'verb', label: 'Verbs' },
+		{ key: 'adjective', label: 'Adjectives' },
+		{ key: 'adverb', label: 'Adverbs' }
+	];
+	let grouped = $derived.by(() => {
+		if (!lesson) return [];
+		const known = new Set(POS_GROUPS.map((g) => g.key));
+		const out = [];
+		for (const g of POS_GROUPS) {
+			const words = lesson.cards.filter((w) => w.pos === g.key);
+			if (words.length) out.push({ label: g.label, words });
+		}
+		const other = lesson.cards.filter((w) => !known.has(w.pos));
+		if (other.length) out.push({ label: out.length ? 'Other' : 'Words', words: other });
+		return out;
+	});
+	let showGroupHeadings = $derived(grouped.length > 1);
 
 	async function load() {
 		error = '';
@@ -80,7 +101,7 @@
 	async function addSuggestion(s) {
 		aiAdding = true;
 		try {
-			await api.addDeckWord(deckId, s.term, s.gloss);
+			await api.addDeckWord(deckId, s.term, s.gloss, s.pos);
 			suggestions = suggestions.filter((x) => x !== s);
 			await load();
 		} catch (e) {
@@ -92,7 +113,7 @@
 	async function addAll() {
 		aiAdding = true;
 		try {
-			for (const s of suggestions) await api.addDeckWord(deckId, s.term, s.gloss);
+			for (const s of suggestions) await api.addDeckWord(deckId, s.term, s.gloss, s.pos);
 			suggestions = [];
 			await load();
 		} catch (e) {
@@ -126,41 +147,43 @@
 	{#if mode === 'play'}
 		<StudyQuiz {lesson} {lang} loadQuiz={() => api.deckQuiz(deckId, 12)} onExit={backToEdit} exitLabel="Back to deck →" />
 	{:else}
-		{#if live}
-			<div class="card ai">
-				<div class="nw-label">✨ Add from English</div>
-				<div class="add-row">
-					<input
-						placeholder="an English word, or a topic like “kitchen”"
-						bind:value={aiQuery}
-						onkeydown={(e) => e.key === 'Enter' && suggest(0)}
-						disabled={aiBusy} />
-					<button class="primary" onclick={() => suggest(0)} disabled={aiBusy || !aiQuery.trim()}>Translate</button>
+		<div class="card ai">
+			<div class="nw-label">✨ Add from English</div>
+			<div class="add-row">
+				<input
+					placeholder={live ? 'an English word, or a topic like “kitchen”' : 'an English word, e.g. “umbrella”'}
+					bind:value={aiQuery}
+					onkeydown={(e) => e.key === 'Enter' && suggest(0)}
+					disabled={aiBusy} />
+				<button class="primary" onclick={() => suggest(0)} disabled={aiBusy || !aiQuery.trim()}>Translate</button>
+				{#if live}
 					<button onclick={() => suggest(8)} disabled={aiBusy || !aiQuery.trim()}>Suggest a set</button>
-				</div>
-				<p class="muted hint">Type a word to translate it, or a topic to get a set of related words.</p>
-				{#if aiError}<div class="error" style="margin-top: 0.5rem;">{aiError}</div>{/if}
-				{#if aiBusy}<p class="muted" style="margin-top: 0.6rem;">Thinking…</p>{/if}
-				{#if suggestions.length}
-					<ul class="suggestions">
-						{#each suggestions as s (s.term)}
-							<li class="sug">
-								<button class="iconbtn" title="Listen" onclick={() => speak(s.term, lang)}>🔊</button>
-								<span class="sug-term">{s.term}</span>
-								<span class="sug-gloss">{s.gloss}{#if s.pos} · {s.pos}{/if}</span>
-								<button class="add-btn" onclick={() => addSuggestion(s)} disabled={aiAdding}>+ Add</button>
-							</li>
-						{/each}
-					</ul>
-					<button class="link" onclick={addAll} disabled={aiAdding}>Add all {suggestions.length} →</button>
 				{/if}
 			</div>
-		{:else}
-			<div class="card">
-				<div class="nw-label">✨ Add from English</div>
-				<p class="muted">Set <code>ANTHROPIC_API_KEY</code> and restart to translate English words (and whole topics) into your target language automatically.</p>
-			</div>
-		{/if}
+			<p class="muted hint">
+				{#if live}
+					Type a word to translate it, or a topic to get a set of related words.
+				{:else}
+					Translated from a built-in dictionary — no setup needed. Set <code>ANTHROPIC_API_KEY</code>
+					for topics and rarer words.
+				{/if}
+			</p>
+			{#if aiError}<div class="error" style="margin-top: 0.5rem;">{aiError}</div>{/if}
+			{#if aiBusy}<p class="muted" style="margin-top: 0.6rem;">Looking it up…</p>{/if}
+			{#if suggestions.length}
+				<ul class="suggestions">
+					{#each suggestions as s (s.term)}
+						<li class="sug">
+							<button class="iconbtn" title="Listen" onclick={() => speak(s.term, lang)}>🔊</button>
+							<span class="sug-term">{s.term}</span>
+							<span class="sug-gloss">{s.gloss}{#if s.pos} · {s.pos}{/if}</span>
+							<button class="add-btn" onclick={() => addSuggestion(s)} disabled={aiAdding}>+ Add</button>
+						</li>
+					{/each}
+				</ul>
+				<button class="link" onclick={addAll} disabled={aiAdding}>Add all {suggestions.length} →</button>
+			{/if}
+		</div>
 
 		<div class="card">
 			<div class="nw-label">Add a word manually</div>
@@ -191,16 +214,19 @@
 			{#if lesson.cards.length === 0}
 				<p class="muted" style="margin-top: 0.8rem;">No words yet — add your first above.</p>
 			{:else}
-				<ul class="words">
-					{#each lesson.cards as w (w.lexeme_id)}
-						<li class="word {w.status}">
-							<button class="iconbtn" title="Listen" onclick={() => speak(w.lemma, lang)}>🔊</button>
-							<span class="w-lemma">{w.lemma}</span>
-							<span class="w-gloss">{w.gloss ?? '—'}</span>
-							<button class="del" title="Remove" onclick={() => removeWord(w.lexeme_id)} disabled={busy}>✕</button>
-						</li>
-					{/each}
-				</ul>
+				{#each grouped as g (g.label)}
+					{#if showGroupHeadings}<div class="group-label">{g.label}</div>{/if}
+					<ul class="words">
+						{#each g.words as w (w.lexeme_id)}
+							<li class="word {w.status}">
+								<button class="iconbtn" title="Listen" onclick={() => speak(w.lemma, lang)}>🔊</button>
+								<span class="w-lemma">{w.lemma}</span>
+								<span class="w-gloss">{w.gloss ?? '—'}</span>
+								<button class="del" title="Remove" onclick={() => removeWord(w.lexeme_id)} disabled={busy}>✕</button>
+							</li>
+						{/each}
+					</ul>
+				{/each}
 			{/if}
 		</div>
 	{/if}
@@ -259,9 +285,17 @@
 		font-size: 0.85rem;
 		padding: 0.3rem 0.7rem;
 	}
+	.group-label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		font-weight: 700;
+		margin-top: 1rem;
+	}
 	.words {
 		list-style: none;
-		margin: 0.8rem 0 0;
+		margin: 0.5rem 0 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
