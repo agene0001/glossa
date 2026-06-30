@@ -4,6 +4,7 @@
 	// function that returns the quiz items; everything else is generic.
 	import { api } from '$lib/api.js';
 	import { speak } from '$lib/audio.js';
+	import Exercise from '$lib/Exercise.svelte';
 
 	let { lesson, loadQuiz, lang = 'es', onExit, exitLabel = 'Done →' } = $props();
 
@@ -17,7 +18,7 @@
 	let items = $state([]);
 	let quizLoading = $state(false);
 	let qIdx = $state(0);
-	let chosen = $state(null);
+	let answered = $state(false);
 	let correctCount = $state(0);
 	let streak = $state(0);
 	let question = $derived(qIdx < items.length ? items[qIdx] : null);
@@ -39,7 +40,7 @@
 		phase = 'quiz';
 		quizLoading = true;
 		qIdx = 0;
-		chosen = null;
+		answered = false;
 		correctCount = 0;
 		error = '';
 		try {
@@ -51,12 +52,9 @@
 		}
 	}
 
-	async function choose(i) {
-		if (chosen !== null || !question) return;
-		chosen = i;
-		const correct = i === question.answer_index;
+	async function onAnswer(correct) {
+		answered = true;
 		if (correct) correctCount += 1;
-		speak(question.prompt, lang);
 		try {
 			const r = await api.recordExercise(question.lexeme_id, correct);
 			streak = r.streak;
@@ -65,15 +63,9 @@
 		}
 	}
 	function nextQuestion() {
-		chosen = null;
+		answered = false;
 		if (qIdx + 1 < items.length) qIdx += 1;
 		else phase = 'done';
-	}
-	function optionClass(i) {
-		if (chosen === null) return '';
-		if (i === question.answer_index) return 'correct';
-		if (i === chosen) return 'wrong';
-		return 'dim';
 	}
 
 	function restart() {
@@ -91,7 +83,12 @@
 	<div class="card flashcard">
 		<div class="fc-progress">Card {cardIdx + 1} of {lesson.cards.length}</div>
 		{#if card}
-			<button class="fc {flipped ? 'flipped' : ''}" onclick={flip}>
+			<div
+				class="fc {flipped ? 'flipped' : ''}"
+				role="button"
+				tabindex="0"
+				onclick={flip}
+				onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flip()}>
 				{#if !flipped}
 					<div class="fc-word">{card.lemma}</div>
 					<div class="fc-hint">tap to reveal meaning</div>
@@ -102,7 +99,7 @@
 					</div>
 					{#if card.status !== 'unknown'}<div class="fc-hint">you've seen this before</div>{/if}
 				{/if}
-			</button>
+			</div>
 		{/if}
 		<div class="nav">
 			<button class="link" onclick={prevCard} disabled={cardIdx === 0}>← Prev</button>
@@ -122,19 +119,10 @@
 	{:else if question}
 		<div class="card quiz">
 			<div class="fc-progress">Question {qIdx + 1} of {items.length}</div>
-			<div class="prompt-row">
-				<div class="prompt">{question.prompt}</div>
-				<button class="iconbtn" title="Listen" onclick={() => speak(question.prompt, lang)}>🔊</button>
-			</div>
-			<div class="prompt-sub">What does this mean?</div>
-			<div class="options">
-				{#each question.options as opt, i (i)}
-					<button class="option {optionClass(i)}" disabled={chosen !== null} onclick={() => choose(i)}>
-						{opt}
-					</button>
-				{/each}
-			</div>
-			{#if chosen !== null}
+			{#key qIdx}
+				<Exercise item={question} {lang} {onAnswer} />
+			{/key}
+			{#if answered}
 				<div class="row" style="justify-content: flex-end; margin-top: 1.2rem;">
 					<button class="primary" onclick={nextQuestion}>
 						{qIdx + 1 < items.length ? 'Next →' : 'Finish'}
@@ -214,49 +202,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-	}
-	.prompt-row {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		margin-top: 0.8rem;
-	}
-	.prompt {
-		font-size: 2.2rem;
-		font-weight: 700;
-	}
-	.prompt-sub {
-		color: var(--muted);
-		margin-top: 0.2rem;
-	}
-	.options {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.7rem;
-		margin-top: 1.4rem;
-	}
-	@media (max-width: 560px) {
-		.options {
-			grid-template-columns: 1fr;
-		}
-	}
-	.option {
-		text-align: left;
-		padding: 0.9rem 1rem;
-		font-size: 1rem;
-		border-radius: 11px;
-	}
-	.option.correct {
-		background: var(--known);
-		border-color: var(--known);
-		color: #04110c;
-	}
-	.option.wrong {
-		background: rgba(224, 106, 106, 0.18);
-		border-color: var(--unknown);
-	}
-	.option.dim {
-		opacity: 0.55;
 	}
 	.emoji-big {
 		font-size: 3rem;

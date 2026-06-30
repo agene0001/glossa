@@ -20,7 +20,7 @@ use glossa_graph::mastery::{
     apply_grammar_exposure, apply_lexeme_exercise, apply_lexeme_exposure, effective_mastery,
 };
 use rand::seq::SliceRandom;
-use rand::Rng;
+use rand::{Rng, RngExt};
 use glossa_graph::select::{next_best_content, overview};
 use glossa_graph::{GraphConfig, GraphOverview};
 use glossa_storage::{Store, StoredStory};
@@ -1005,7 +1005,7 @@ pub async fn pack_quiz(
     learner_id: LearnerId,
     pack_id: i64,
     limit: usize,
-) -> Result<Vec<ReviewItem>> {
+) -> Result<Vec<Exercise>> {
     let profile = store
         .get_learner(learner_id)
         .await?
@@ -1049,7 +1049,7 @@ pub async fn pack_quiz(
     let mut rng = rand::rng();
     Ok(candidates
         .into_iter()
-        .map(|lex| build_review_item(lex, &glossed, &mut rng))
+        .map(|lex| build_exercise(lex, pick_kind(confidence_of(lex.id), &mut rng), &glossed, &mut rng))
         .collect())
 }
 
@@ -1263,7 +1263,7 @@ pub async fn deck_quiz(
     learner_id: LearnerId,
     deck_id: i64,
     limit: usize,
-) -> Result<Vec<ReviewItem>> {
+) -> Result<Vec<Exercise>> {
     let deck = owned_deck(store, learner_id, deck_id).await?;
 
     let user_lexemes = store.user_lexemes(&deck.language).await?;
@@ -1301,20 +1301,47 @@ pub async fn deck_quiz(
     let mut rng = rand::rng();
     Ok(candidates
         .into_iter()
-        .map(|lex| build_review_item(lex, &glossed, &mut rng))
+        .map(|lex| build_exercise(lex, pick_kind(confidence_of(lex.id), &mut rng), &glossed, &mut rng))
         .collect())
 }
 
 // --- review / spaced-repetition quiz -------------------------------------
 
-/// A single multiple-choice question: show the word, pick its meaning.
+/// What the learner is asked to do for one exercise. Recognition kinds are
+/// multiple-choice; production kinds want a typed answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExerciseKind {
+    /// Show the word, pick its meaning (easiest — recognition).
+    ChooseMeaning,
+    /// Show the meaning, pick the word (reverse recognition).
+    ChooseWord,
+    /// Show the meaning, type the word (production).
+    TypeAnswer,
+}
+
+/// One exercise. A superset of the old multiple-choice item: MC kinds fill
+/// `options`/`answer_index`; the typed kind leaves them empty and is checked
+/// against `accepts` (the frontend normalizes the same way, so a missing accent
+/// isn't punished). `answer` is always the canonical correct response to reveal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ReviewItem {
+pub struct Exercise {
     pub lexeme_id: i64,
+    pub kind: ExerciseKind,
+    /// Imperative shown above the prompt, e.g. "Type the word".
+    pub instruction: String,
+    /// The stimulus: a word for recognition, a meaning for production.
     pub prompt: String,
     pub pos: PartOfSpeech,
+    /// Choices for multiple-choice kinds; empty for `TypeAnswer`.
     pub options: Vec<String>,
+    /// Index of the correct option (unused, 0, for `TypeAnswer`).
     pub answer_index: usize,
+    /// The canonical correct answer, revealed after answering.
+    pub answer: String,
+    /// Normalized accepted answers for `TypeAnswer` (lowercased + a
+    /// diacritic-folded variant), so "cafe" matches "café".
+    pub accepts: Vec<String>,
 }
 
 /// Result of answering one review question.
@@ -1360,7 +1387,7 @@ pub async fn review_session(
     cfg: &GraphConfig,
     learner_id: LearnerId,
     limit: usize,
-) -> Result<Vec<ReviewItem>> {
+) -> Result<Vec<Exercise>> {
     let profile = store
         .get_learner(learner_id)
         .await?
@@ -1392,42 +1419,123 @@ pub async fn review_session(
     let mut rng = rand::rng();
     let items = candidates
         .into_iter()
-        .map(|(lex, _)| build_review_item(lex, &glossed, &mut rng))
+        .map(|(lex, conf)| build_exercise(lex, pick_kind(conf, &mut rng), &glossed, &mut rng))
         .collect();
     Ok(items)
 }
 
-fn build_review_item(target: &Lexeme, glossed: &[&Lexeme], rng: &mut impl Rng) -> ReviewItem {
-    let correct = target.gloss.clone().unwrap_or_default();
+/// Fold common Spanish/French/German diacritics to ASCII, so typed answers are
+/// matched leniently ("cafe" == "café", "uben" == "üben").
+fn fold_diacritics(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ä' | 'ã' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
 
-    let mut pool: Vec<&Lexeme> = glossed
-        .iter()
-        .copied()
-        .filter(|l| l.id != target.id)
-        .collect();
-    pool.shuffle(rng);
+/// Choose an exercise kind by how well the learner knows the word: recognition
+/// while it's weak, production once it's strong — you produce what you can
+/// already recognize. A little randomness keeps a session varied.
+fn pick_kind(confidence: f32, rng: &mut impl Rng) -> ExerciseKind {
+    let r: f32 = rng.random();
+    if confidence < 0.34 {
+        if r < 0.8 { ExerciseKind::ChooseMeaning } else { ExerciseKind::ChooseWord }
+    } else if confidence < 0.7 {
+        if r < 0.45 {
+            ExerciseKind::ChooseWord
+        } else if r < 0.75 {
+            ExerciseKind::ChooseMeaning
+        } else {
+            ExerciseKind::TypeAnswer
+        }
+    } else if r < 0.6 {
+        ExerciseKind::TypeAnswer
+    } else {
+        ExerciseKind::ChooseWord
+    }
+}
 
-    let mut options: Vec<String> = Vec::new();
-    for l in pool {
-        if let Some(g) = &l.gloss {
-            if g != &correct && !options.contains(g) {
-                options.push(g.clone());
-                if options.len() == 3 {
-                    break;
-                }
+/// Up to `n` distinct distractor strings from the pool, skipping the answer.
+fn distractors(values: impl Iterator<Item = String>, answer: &str, n: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for v in values {
+        if v != answer && !out.contains(&v) {
+            out.push(v);
+            if out.len() == n {
+                break;
             }
         }
     }
-    options.push(correct.clone());
-    options.shuffle(rng);
-    let answer_index = options.iter().position(|o| o == &correct).unwrap_or(0);
+    out
+}
 
-    ReviewItem {
-        lexeme_id: target.id.0,
-        prompt: target.lemma.clone(),
-        pos: target.pos,
-        options,
-        answer_index,
+/// Build one exercise of the requested kind for `target`, drawing distractors
+/// from `glossed` (other words that have a meaning).
+fn build_exercise(
+    target: &Lexeme,
+    kind: ExerciseKind,
+    glossed: &[&Lexeme],
+    rng: &mut impl Rng,
+) -> Exercise {
+    let lemma = target.lemma.clone();
+    let gloss = target.gloss.clone().unwrap_or_default();
+    let mut pool: Vec<&Lexeme> = glossed.iter().copied().filter(|l| l.id != target.id).collect();
+    pool.shuffle(rng);
+
+    let mut mc = |prompt: String,
+                  answer: String,
+                  mut options: Vec<String>,
+                  instruction: &str|
+     -> Exercise {
+        options.push(answer.clone());
+        options.shuffle(rng);
+        let answer_index = options.iter().position(|o| o == &answer).unwrap_or(0);
+        Exercise {
+            lexeme_id: target.id.0,
+            kind,
+            instruction: instruction.into(),
+            prompt,
+            pos: target.pos,
+            options,
+            answer_index,
+            answer,
+            accepts: Vec::new(),
+        }
+    };
+
+    match kind {
+        ExerciseKind::ChooseMeaning => {
+            let opts = distractors(pool.iter().filter_map(|l| l.gloss.clone()), &gloss, 3);
+            mc(lemma, gloss, opts, "Pick the meaning")
+        }
+        ExerciseKind::ChooseWord => {
+            let opts = distractors(pool.iter().map(|l| l.lemma.clone()), &lemma, 3);
+            mc(gloss, lemma, opts, "Pick the word")
+        }
+        ExerciseKind::TypeAnswer => {
+            let n = lemma.trim().to_lowercase();
+            let folded = fold_diacritics(&n);
+            let accepts = if folded == n { vec![n] } else { vec![n, folded] };
+            Exercise {
+                lexeme_id: target.id.0,
+                kind,
+                instruction: "Type the word".into(),
+                prompt: gloss,
+                pos: target.pos,
+                options: Vec::new(),
+                answer_index: 0,
+                answer: lemma,
+                accepts,
+            }
+        }
     }
 }
 
@@ -1807,12 +1915,54 @@ mod tests {
         let items = review_session(&store, &cfg, learner.id, 10).await.unwrap();
         assert_eq!(items.len(), 1);
         let it = &items[0];
-        assert_eq!(it.prompt, "yo");
-        assert_eq!(it.options[it.answer_index], "yo-en");
-        assert!(it.options.len() >= 2 && it.options.len() <= 4);
+        assert_eq!(it.lexeme_id, 1);
+        // Whatever kind was chosen, the exercise must be internally consistent.
+        match it.kind {
+            ExerciseKind::ChooseMeaning => {
+                assert_eq!(it.prompt, "yo"); // shown the word
+                assert_eq!(it.answer, "yo-en"); // answer is its meaning
+                assert_eq!(it.options[it.answer_index], "yo-en");
+            }
+            ExerciseKind::ChooseWord => {
+                assert_eq!(it.prompt, "yo-en"); // shown the meaning
+                assert_eq!(it.answer, "yo"); // answer is the word
+                assert_eq!(it.options[it.answer_index], "yo");
+            }
+            ExerciseKind::TypeAnswer => {
+                assert_eq!(it.prompt, "yo-en");
+                assert_eq!(it.answer, "yo");
+                assert!(it.options.is_empty());
+                assert!(it.accepts.contains(&"yo".to_string()));
+            }
+        }
 
         record_exercise(&store, &cfg, learner.id, 1, true)
             .await
             .unwrap();
+    }
+
+    #[test]
+    fn exercise_kinds_are_well_formed() {
+        let mut rng = rand::rng();
+        let target = lex(1, "café", 1); // gloss "café-en", has a diacritic
+        let other = lex(2, "agua", 2);
+        let glossed: Vec<&Lexeme> = vec![&target, &other];
+
+        // Recognition: word shown, meaning is the answer among the options.
+        let m = build_exercise(&target, ExerciseKind::ChooseMeaning, &glossed, &mut rng);
+        assert_eq!(m.prompt, "café");
+        assert_eq!(m.options[m.answer_index], m.answer);
+
+        // Reverse recognition: meaning shown, word is the answer.
+        let w = build_exercise(&target, ExerciseKind::ChooseWord, &glossed, &mut rng);
+        assert_eq!(w.answer, "café");
+        assert_eq!(w.options[w.answer_index], "café");
+
+        // Production: typed, and accent-folded so "cafe" is accepted.
+        let t = build_exercise(&target, ExerciseKind::TypeAnswer, &glossed, &mut rng);
+        assert!(t.options.is_empty());
+        assert_eq!(t.answer, "café");
+        assert!(t.accepts.contains(&"cafe".to_string()));
+        assert!(t.accepts.contains(&"café".to_string()));
     }
 }
