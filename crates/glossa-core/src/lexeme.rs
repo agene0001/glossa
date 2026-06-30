@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ids::{LexemeId, PatternId};
 use crate::lang::{LanguageCode, PartOfSpeech};
+use crate::unit::ExampleSentence;
 
 /// A dictionary headword in the target language.
 ///
@@ -33,6 +34,10 @@ pub struct GrammarDrill {
     pub answer: String,
     /// A native-language translation of the completed sentence.
     pub translation: String,
+    /// An optional teaching note shown after answering — e.g. why an irregular
+    /// answer doesn't follow the rule. Most drills leave this empty.
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// A grammar pattern tracked as a first-class node, exactly like vocabulary
@@ -56,6 +61,13 @@ pub struct GrammarPattern {
     /// Patterns that must be learned first — gates this lesson in the track.
     #[serde(default)]
     pub prerequisites: Vec<PatternId>,
+    /// Worked examples shown in the lesson (the rule in action).
+    #[serde(default)]
+    pub examples: Vec<ExampleSentence>,
+    /// Teaching notes / nuances / common-mistake & irregular callouts, shown as
+    /// bullets in the lesson before the drills.
+    #[serde(default)]
+    pub notes: Vec<String>,
     /// Drills that test this pattern in the Grammar track.
     #[serde(default)]
     pub drills: Vec<GrammarDrill>,

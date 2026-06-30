@@ -110,6 +110,7 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         prompt: prompt.into(),
         answer: answer.into(),
         translation: tr.into(),
+        note: None,
     };
     let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
@@ -119,6 +120,8 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         example_template: ex.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        examples: Vec::new(),
+        notes: Vec::new(),
         drills,
     };
     vec![
@@ -453,6 +456,7 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         prompt: prompt.into(),
         answer: answer.into(),
         translation: tr.into(),
+        note: None,
     };
     let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
@@ -462,6 +466,8 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         example_template: ex.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        examples: Vec::new(),
+        notes: Vec::new(),
         drills,
     };
     vec![
@@ -642,67 +648,149 @@ fn french_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
 // --- German --------------------------------------------------------------
 
 fn german_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
+    let ex = |t: &str, tr: &str| ExampleSentence {
+        text: t.into(),
+        translation: tr.into(),
+    };
     let d = |prompt: &str, answer: &str, tr: &str| GrammarDrill {
         prompt: prompt.into(),
         answer: answer.into(),
         translation: tr.into(),
+        note: None,
     };
-    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
+    // A drill that teaches something after the answer (e.g. why it's irregular).
+    let dn = |prompt: &str, answer: &str, tr: &str, note: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+        note: Some(note.into()),
+    };
+    #[allow(clippy::too_many_arguments)]
+    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
-        example_template: ex.into(),
+        example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
+        examples,
+        notes: notes.iter().map(|s| s.to_string()).collect(),
         drills,
     };
     vec![
         p(1, "articles-der-die-das", "Gender & articles (der / die / das)", "der Mann, die Frau, das Kind",
-          "German nouns are masculine, feminine, or neuter. 'the' is der (m.), die (f.), or das (n.); 'a' is ein (m./n.) or eine (f.).",
-          &[], vec![
+          "Every German noun has a gender — masculine, feminine, or neuter — and 'the' changes with it: der (m.), die (f.), das (n.). For 'a/an' it's ein (m./n.) or eine (f.). The gender belongs to the word itself, not to the meaning, so it must be learned with each noun.",
+          &[],
+          vec![
+            ex("der Mann, die Frau, das Kind", "the man, the woman, the child"),
+            ex("Das ist ein Hund und eine Katze.", "That is a dog and a cat."),
+          ],
+          &[
+            "There's no reliable rule for gender — memorise it with the word: learn 'das Haus', not just 'Haus'.",
+            "In the plural, 'the' is always die, whatever the gender: die Männer, die Frauen, die Kinder.",
+            "'a/an' is ein for masculine and neuter, eine for feminine — the gender decides it, not the English.",
+          ],
+          vec![
             d("___ Mann ist groß. (the, m.)", "der", "The man is tall."),
             d("___ Frau ist hier. (the, f.)", "die", "The woman is here."),
             d("___ Kind spielt. (the, n.)", "das", "The child plays."),
             d("Das ist ___ Haus. (a, n.)", "ein", "That is a house."),
           ]),
         p(2, "present-tense", "Present tense", "ich mache, du machst, er macht",
-          "Regular verbs drop -en and add endings: -e (ich), -st (du), -t (er/sie/es), -en (wir/sie). E.g. machen → mache, machst, macht.",
-          &[], vec![
+          "To conjugate a regular verb, drop the -en from the infinitive and add an ending for each person. The endings are -e (ich), -st (du), -t (er/sie/es), -en (wir, sie, Sie), -t (ihr). So machen → ich mache, du machst, er macht, wir machen.",
+          &[],
+          vec![
+            ex("ich mache, du machst, er macht", "I do, you do, he does"),
+            ex("Wir lernen Deutsch und sprechen Englisch.", "We learn German and speak English."),
+          ],
+          &[
+            "Stem-changing verbs shift their vowel in the du- and er/sie/es-forms only: essen → du isst, er isst; sprechen → du sprichst, er spricht; fahren → du fährst, er fährt. The wir/sie forms stay regular (wir essen).",
+            "If the stem ends in -t or -d, an extra -e is added so it's pronounceable: arbeiten → du arbeitest, er arbeitet.",
+            "German has one present tense — 'ich lerne' covers both 'I learn' and 'I am learning'.",
+          ],
+          vec![
             d("Ich ___ Deutsch. (lernen)", "lerne", "I learn German."),
             d("Du ___ Wasser. (trinken)", "trinkst", "You drink water."),
-            d("Er ___ Brot. (essen)", "isst", "He eats bread."),
+            dn("Er ___ Brot. (essen)", "isst", "He eats bread.",
+               "essen is a stem-changer (e→i): ich esse, but du isst and er isst — not 'esst'."),
             d("Wir ___ in der Stadt. (wohnen)", "wohnen", "We live in the city."),
           ]),
         p(3, "sein-haben", "To be & to have (sein, haben)", "ich bin, ich habe",
-          "Two essential irregular verbs: sein (to be) → ich bin, du bist, er ist; haben (to have) → ich habe, du hast, er hat.",
-          &[], vec![
-            d("Ich ___ müde. (sein)", "bin", "I am tired."),
-            d("Du ___ einen Hund. (haben)", "hast", "You have a dog."),
+          "sein (to be) and haben (to have) are the two most important verbs in German — and both are irregular, so every form has to be learned by heart. sein: ich bin, du bist, er/sie/es ist, wir/sie sind, ihr seid. haben: ich habe, du hast, er hat, wir/sie haben, ihr habt.",
+          &[],
+          vec![
+            ex("Ich bin müde. Du bist groß.", "I am tired. You are tall."),
+            ex("Ich habe Zeit. Sie hat einen Hund.", "I have time. She has a dog."),
+          ],
+          &[
+            "sein doesn't look like its infinitive at all — bin, bist, ist, sind. Drill it until it's automatic.",
+            "haben drops its -b- in the du and er forms: du hast, er hat (not 'habst/habt').",
+          ],
+          vec![
+            dn("Ich ___ müde. (sein)", "bin", "I am tired.",
+               "sein is fully irregular: ich bin, du bist, er ist, wir sind."),
+            dn("Du ___ einen Hund. (haben)", "hast", "You have a dog.",
+               "haben loses its -b- here: du hast, er hat — not 'habst/habt'."),
             d("Sie ___ eine Frau. (sein)", "ist", "She is a woman."),
             d("Wir ___ Zeit. (haben)", "haben", "We have time."),
           ]),
         p(4, "plural-nouns", "Plural nouns", "der Hund → die Hunde, das Kind → die Kinder",
-          "German plurals are irregular — endings include -e, -er, -en, -s, or none, often with an umlaut. They're learned per noun rather than by a single rule.",
-          &[1], vec![
+          "German has no single way to make a plural. A noun takes one of several endings — and sometimes an umlaut — depending on the word, so the plural is learned together with the noun (and its gender).",
+          &[1],
+          vec![
+            ex("der Hund → die Hunde", "the dog → the dogs"),
+            ex("das Kind → die Kinder", "the child → the children"),
+            ex("die Mutter → die Mütter", "the mother → the mothers"),
+          ],
+          &[
+            "Common plural endings: -e (Hund→Hunde), -er (Kind→Kinder, usually + umlaut), -(e)n (Frau→Frauen), -s (Auto→Autos), or no ending — often just an umlaut (Mutter→Mütter).",
+            "The plural article is always die: die Hunde, die Kinder, die Autos.",
+            "Because it's unpredictable, learn each noun as a trio: gender + singular + plural (das Kind, die Kinder).",
+          ],
+          vec![
             d("ein Hund, zwei ___ (Hund)", "Hunde", "one dog, two dogs"),
-            d("ein Kind, drei ___ (Kind)", "Kinder", "one child, three children"),
+            dn("ein Kind, drei ___ (Kind)", "Kinder", "one child, three children",
+               "The -er plural is common for neuter nouns and often adds an umlaut (Mann→Männer), though Kind→Kinder doesn't."),
             d("ein Auto, zwei ___ (Auto)", "Autos", "two cars"),
             d("eine Frau, zwei ___ (Frau)", "Frauen", "two women"),
           ]),
         p(5, "negation-nicht-kein", "Negation (nicht / kein)", "Ich bin nicht müde. Das ist kein Hund.",
-          "Use 'nicht' to negate a verb or adjective, and 'kein/keine' to negate a noun (it replaces ein/eine): kein Hund, keine Zeit.",
-          &[2], vec![
+          "German negates in two ways. Use kein/keine to say 'no / not a' before a noun — it replaces ein/eine and takes the same endings. Use nicht for everything else: to negate a verb, an adjective, or a noun that has a definite article.",
+          &[2],
+          vec![
+            ex("Ich bin nicht müde.", "I am not tired."),
+            ex("Ich habe keine Zeit.", "I have no time."),
+            ex("Das ist nicht der Hund.", "That is not the dog."),
+          ],
+          &[
+            "kein replaces ein/eine and matches the noun's gender: kein Hund (m.), keine Katze (f.), kein Haus (n.), keine Hunde (pl.).",
+            "Use nicht with a verb or adjective (Ich arbeite nicht; Es ist nicht gut) and with a noun that has 'the' (nicht der Hund).",
+            "Rule of thumb: if the positive sentence used ein or no article, negate with kein; otherwise use nicht.",
+          ],
+          vec![
             d("Ich bin ___ müde. (not)", "nicht", "I am not tired."),
             d("Das ist ___ Hund. (not a, m.)", "kein", "That is not a dog."),
             d("Ich spreche ___ Deutsch. (not)", "nicht", "I do not speak German."),
-            d("Er hat ___ Zeit. (no, f.)", "keine", "He has no time."),
+            dn("Er hat ___ Zeit. (no, f.)", "keine", "He has no time.",
+               "Zeit is feminine, so 'no time' is keine Zeit — kein takes an -e like eine."),
           ]),
         p(6, "word-order-v2", "Word order (verb second)", "Heute lerne ich Deutsch.",
-          "The conjugated verb is always the second element. If a sentence starts with a time or place word, the subject moves after the verb: Heute lerne ich (not 'Heute ich lerne').",
-          &[2], vec![
+          "In a German main clause the conjugated verb is always the second element — not necessarily the second word, but the second 'piece' of the sentence. Whatever comes first (the subject, or a time/place phrase), the verb follows immediately, and if you didn't start with the subject, it slides in right after the verb.",
+          &[2],
+          vec![
+            ex("Ich lerne heute Deutsch.", "I am learning German today."),
+            ex("Heute lerne ich Deutsch.", "Today I am learning German."),
+          ],
+          &[
+            "Start with a time or place word and the subject moves after the verb: Heute lerne ich… (never 'Heute ich lerne').",
+            "Only ONE element may sit before the verb. 'Heute ich…' is wrong because that's two.",
+            "This verb-second (V2) rule is one of the most distinctive — and most drilled — features of German.",
+          ],
+          vec![
             d("Heute ___ ich Deutsch. (lernen)", "lerne", "Today I learn German."),
-            d("Morgen ___ wir nach Berlin. (fahren)", "fahren", "Tomorrow we drive to Berlin."),
+            dn("Morgen ___ wir nach Berlin. (fahren)", "fahren", "Tomorrow we drive to Berlin.",
+               "After 'Morgen', the verb comes before the subject: Morgen fahren wir — verb second."),
             d("Jetzt ___ er Kaffee. (trinken)", "trinkt", "Now he drinks coffee."),
             d("Hier ___ ich. (arbeiten)", "arbeite", "Here I work."),
           ]),

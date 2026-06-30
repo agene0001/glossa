@@ -46,6 +46,10 @@ pub struct Conjugation {
     pub gloss: &'static str,
     /// The conjugated verb form for this person ("soy", "suis").
     pub form: String,
+    /// True when this form deviates from what the regular rule would produce —
+    /// i.e. it's irregular and worth flagging so the learner doesn't guess it
+    /// from the pattern (e.g. `essen → er isst`, not `esst`).
+    pub irregular: bool,
 }
 
 /// Spanish subject pronouns, in the order present-tense tables are emitted.
@@ -82,20 +86,32 @@ pub fn present_tense(lex: &Lexeme) -> Vec<Conjugation> {
         return Vec::new();
     }
     let lemma = lex.lemma.to_lowercase();
-    let (forms, pronouns) = match lex.language.as_str() {
-        "es" => (spanish_present(&lemma), &ES_PRONOUNS),
-        "fr" => (french_present(&lemma), &FR_PRONOUNS),
-        "de" => (german_present(&lemma), &DE_PRONOUNS),
+    // `actual` is the real conjugation; `regular` is what the plain rule would
+    // give, so we can flag each cell that deviates (i.e. is irregular).
+    let (actual, regular, pronouns) = match lex.language.as_str() {
+        "es" => (spanish_present(&lemma), spanish_present_regular(&lemma), &ES_PRONOUNS),
+        "fr" => (french_present(&lemma), french_present_regular(&lemma), &FR_PRONOUNS),
+        "de" => (german_present(&lemma), german_present_regular(&lemma), &DE_PRONOUNS),
         _ => return Vec::new(),
     };
-    match forms {
-        Some(forms) => pronouns
-            .iter()
-            .zip(forms)
-            .map(|(&(pronoun, gloss), form)| Conjugation { pronoun, gloss, form })
-            .collect(),
-        None => Vec::new(),
-    }
+    let Some(actual) = actual else {
+        return Vec::new();
+    };
+    let flags: [bool; 5] = match &regular {
+        Some(r) => std::array::from_fn(|i| actual[i] != r[i]),
+        None => [false; 5],
+    };
+    pronouns
+        .iter()
+        .zip(actual)
+        .enumerate()
+        .map(|(i, (&(pronoun, gloss), form))| Conjugation {
+            pronoun,
+            gloss,
+            form,
+            irregular: flags[i],
+        })
+        .collect()
 }
 
 /// Present-tense forms [yo, tú, él, nosotros, ellos] for a Spanish verb.
@@ -103,6 +119,12 @@ fn spanish_present(lemma: &str) -> Option<[String; 5]> {
     if let Some(forms) = spanish_present_irregular(lemma) {
         return Some(forms.map(String::from));
     }
+    spanish_present_regular(lemma)
+}
+
+/// What the regular -ar/-er/-ir rule alone produces (the baseline for flagging
+/// irregular forms).
+fn spanish_present_regular(lemma: &str) -> Option<[String; 5]> {
     let (stem, ends) = if let Some(s) = lemma.strip_suffix("ar") {
         (s, ["o", "as", "a", "amos", "an"])
     } else if let Some(s) = lemma.strip_suffix("er") {
@@ -147,6 +169,11 @@ fn french_present(lemma: &str) -> Option<[String; 5]> {
     if let Some(forms) = french_present_irregular(lemma) {
         return Some(forms.map(String::from));
     }
+    french_present_regular(lemma)
+}
+
+/// What the regular -er rule alone produces (baseline for flagging irregulars).
+fn french_present_regular(lemma: &str) -> Option<[String; 5]> {
     let stem = lemma.strip_suffix("er")?;
     // nous keeps a soft g/c: manger → mangeons, commencer → commençons.
     let nous = if lemma.ends_with("ger") {
@@ -379,6 +406,12 @@ fn german_present(lemma: &str) -> Option<[String; 5]> {
     if let Some(forms) = german_present_irregular(lemma) {
         return Some(forms.map(String::from));
     }
+    german_present_regular(lemma)
+}
+
+/// What the regular German present rule alone produces (baseline for flagging
+/// irregulars).
+fn german_present_regular(lemma: &str) -> Option<[String; 5]> {
     let stem = german_stem(lemma);
     // du/er pick up an extra -e after t/d (arbeitest); a sibilant stem collapses
     // the du -st to -t (du reist, not reisst).
@@ -502,6 +535,15 @@ mod tests {
         let sidx = build_form_index(&[sein]);
         assert_eq!(sidx.get("bin"), Some(&LexemeId(3)));
         assert_eq!(sidx.get("ist"), Some(&LexemeId(3)));
+
+        // Irregular cells are flagged; regular ones aren't.
+        let essen = lex(4, "de", "essen", PartOfSpeech::Verb);
+        let conj = present_tense(&essen);
+        assert_eq!(conj[0].form, "esse");
+        assert!(!conj[0].irregular, "ich esse follows the rule");
+        assert_eq!(conj[2].form, "isst");
+        assert!(conj[2].irregular, "er isst deviates from the rule (esst)");
+        assert!(present_tense(&machen).iter().all(|c| !c.irregular), "machen is regular");
     }
 
     #[test]

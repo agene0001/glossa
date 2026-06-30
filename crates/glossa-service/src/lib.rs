@@ -377,6 +377,8 @@ pub struct ConjugationCell {
     pub pronoun: String,
     pub pronoun_gloss: String,
     pub form: String,
+    /// True when this form is irregular (deviates from the regular rule).
+    pub irregular: bool,
 }
 
 /// A verb the unit teaches, with its present-tense conjugation — so the lesson
@@ -613,6 +615,7 @@ pub async fn unit_lesson(
                     pronoun: c.pronoun.to_string(),
                     pronoun_gloss: c.gloss.to_string(),
                     form: c.form,
+                    irregular: c.irregular,
                 })
                 .collect();
             (!cells.is_empty()).then(|| UnitConjugation {
@@ -1332,9 +1335,11 @@ pub struct DrillItem {
     pub answer: String,
     pub translation: String,
     pub accepts: Vec<String>,
+    /// A teaching note shown after answering (e.g. why an answer is irregular).
+    pub note: Option<String>,
 }
 
-/// The full lesson for one grammar pattern: explain it, then drill it.
+/// The full lesson for one grammar pattern: teach it, then drill it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GrammarLesson {
     pub id: i64,
@@ -1342,6 +1347,10 @@ pub struct GrammarLesson {
     pub label: String,
     pub explanation: Option<String>,
     pub example: String,
+    /// Worked examples (the rule in action), with translations.
+    pub examples: Vec<glossa_core::ExampleSentence>,
+    /// Nuance / common-mistake / irregular notes, shown as bullets.
+    pub notes: Vec<String>,
     pub drills: Vec<DrillItem>,
     pub status: TokenStatus,
 }
@@ -1448,6 +1457,7 @@ pub async fn grammar_lesson(
             answer: dr.answer.clone(),
             translation: dr.translation.clone(),
             accepts: accepts_for(&dr.answer),
+            note: dr.note.clone(),
         })
         .collect();
 
@@ -1457,6 +1467,8 @@ pub async fn grammar_lesson(
         label: pattern.label.clone(),
         explanation: pattern.explanation.clone(),
         example: pattern.example_template.clone(),
+        examples: pattern.examples.clone(),
+        notes: pattern.notes.clone(),
         drills,
         status: mastery_to_token(m),
     })
@@ -2332,10 +2344,13 @@ mod tests {
             example_template: "ex".into(),
             explanation: Some("explain".into()),
             prerequisites: prereqs,
+            examples: Vec::new(),
+            notes: Vec::new(),
             drills: vec![GrammarDrill {
                 prompt: "Yo ___ español. (hablar)".into(),
                 answer: "hablo".into(),
                 translation: "I speak Spanish.".into(),
+                note: None,
             }],
         };
         store

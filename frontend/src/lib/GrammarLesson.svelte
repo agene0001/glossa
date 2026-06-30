@@ -86,8 +86,34 @@
 		<div class="card">
 			<div class="step-kicker">The rule</div>
 			{#if lesson.explanation}<p class="expl">{lesson.explanation}</p>{/if}
-			{#if lesson.example}<div class="example">{lesson.example}</div>{/if}
 		</div>
+
+		{#if lesson.examples.length}
+			<div class="card">
+				<div class="step-kicker">In action</div>
+				<div class="examples">
+					{#each lesson.examples as e, i (i)}
+						<div class="ex">
+							<div class="ex-de">
+								<span>{e.text}</span>
+								<button class="iconbtn" title="Listen" onclick={() => speak(e.text, lang)}>🔊</button>
+							</div>
+							<div class="ex-tr">{e.translation}</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if lesson.notes.length}
+			<div class="card notes-card">
+				<div class="step-kicker">Watch out for</div>
+				<ul class="notes">
+					{#each lesson.notes as n, i (i)}<li>{n}</li>{/each}
+				</ul>
+			</div>
+		{/if}
+
 		<div class="nav">
 			{#if lesson.drills.length}
 				<button class="primary" onclick={startDrills}>Practice drills →</button>
@@ -105,6 +131,7 @@
 			{/key}
 			{#if answered}
 				<div class="translation">{drill.translation}</div>
+				{#if drill.note}<div class="drill-note">💡 {drill.note}</div>{/if}
 				<div class="row" style="justify-content: flex-end; margin-top: 1rem;">
 					<button class="primary" onclick={next}>
 						{dIdx + 1 < lesson.drills.length ? 'Next →' : 'Finish'}
@@ -139,18 +166,51 @@
 	}
 	.expl {
 		font-size: 1.05rem;
-		margin: 0 0 0.8rem;
+		line-height: 1.55;
+		margin: 0;
 	}
-	.example {
-		font-style: italic;
+	.examples {
+		display: flex;
+		flex-direction: column;
+		gap: 0.8rem;
+	}
+	.ex-de {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 1.1rem;
+		font-weight: 600;
+	}
+	.ex-tr {
 		color: var(--muted);
-		padding: 0.6rem 0.9rem;
-		border-left: 3px solid var(--border);
+		font-style: italic;
+		font-size: 0.92rem;
+	}
+	.notes-card {
+		border-color: color-mix(in srgb, var(--new) 35%, var(--border));
+	}
+	.notes {
+		margin: 0;
+		padding-left: 1.1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.notes li {
+		line-height: 1.5;
 	}
 	.translation {
 		margin-top: 0.9rem;
 		color: var(--muted);
 		font-style: italic;
+	}
+	.drill-note {
+		margin-top: 0.6rem;
+		padding: 0.6rem 0.8rem;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--new) 12%, var(--panel-2));
+		font-size: 0.9rem;
+		line-height: 1.5;
 	}
 	.nav {
 		margin-top: 1.2rem;

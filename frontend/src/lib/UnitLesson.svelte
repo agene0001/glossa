@@ -210,8 +210,10 @@
 				<div class="card">
 					<div class="step-kicker">How the verbs change</div>
 					<p class="muted" style="margin-top: 0;">
-						Spanish verbs change their ending for each person. These are the same word — you'll see
-						these forms in the examples, so they aren't new vocabulary.
+						Verbs change their ending for each person. These are the same word — you'll see these
+						forms in the examples, so they aren't new vocabulary. A <span class="irr-key">★</span>
+						marks an <strong>irregular</strong> form that doesn't follow the regular pattern — learn
+						those by heart.
 					</p>
 					{#each lesson.conjugations as c (c.lemma)}
 						<div class="conj">
@@ -222,11 +224,11 @@
 							<table class="conj-table">
 								<tbody>
 									{#each c.cells as cell (cell.pronoun)}
-										<tr>
+										<tr class:irr={cell.irregular}>
 											<td class="conj-pron">{cell.pronoun} <span class="muted">({cell.pronoun_gloss})</span></td>
 											<td class="conj-form">
 												<button class="link-form" title="Listen" onclick={() => speak(cell.form, lang)}>
-													{cell.form} 🔊
+													{cell.form}{#if cell.irregular} <span class="irr-key" title="irregular">★</span>{/if} 🔊
 												</button>
 											</td>
 										</tr>
@@ -493,6 +495,13 @@
 		font-weight: 600;
 		cursor: pointer;
 		padding: 0;
+	}
+	.conj-table tr.irr .conj-form {
+		color: var(--new);
+	}
+	.irr-key {
+		color: var(--new);
+		font-weight: 700;
 	}
 	.nav {
 		display: flex;

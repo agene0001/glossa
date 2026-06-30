@@ -276,6 +276,8 @@ mod tests {
                 example_template: "Ayer ___é ...".into(),
                 explanation: None,
                 prerequisites: Vec::new(),
+                examples: Vec::new(),
+                notes: Vec::new(),
                 drills: Vec::new(),
             }),
             known_ratio: 0.95,
