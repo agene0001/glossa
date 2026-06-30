@@ -9,23 +9,27 @@
 //! it stays trivially testable and reusable from a future `glossa-api`.
 
 mod content;
+mod deck;
 mod event;
 mod ids;
 mod lang;
 mod learner;
 mod lexeme;
 mod mastery;
+mod pack;
 mod unit;
 
 pub use content::{
     ContentKind, ContentRequest, ContentResponse, GeneratedContent, Token, TokenStatus, WordInfo,
 };
+pub use deck::Deck;
 pub use event::LearningEvent;
-pub use ids::{LearnerId, LexemeId, PatternId, UnitId};
+pub use ids::{DeckId, LearnerId, LexemeId, PackId, PatternId, UnitId};
 pub use lang::{LanguageCode, PartOfSpeech};
 pub use learner::LearnerProfile;
 pub use lexeme::{GrammarPattern, Lexeme};
 pub use mastery::{GrammarState, LexemeState, MasteryState};
+pub use pack::VocabPack;
 pub use unit::{ExampleSentence, ReadingPassage, Unit};
 
 /// Crate-wide error type. Kept intentionally small; domain logic rarely fails,

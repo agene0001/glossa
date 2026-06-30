@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 use glossa_content::ContentGenerator;
 use glossa_core::{
-    ContentRequest, ContentResponse, LanguageCode, LearnerId, LearnerProfile, Lexeme, LexemeId,
-    LexemeState, MasteryState, PartOfSpeech, Token, TokenStatus, Unit, WordInfo,
+    ContentRequest, ContentResponse, Deck, DeckId, LanguageCode, LearnerId, LearnerProfile, Lexeme,
+    LexemeId, LexemeState, MasteryState, PartOfSpeech, Token, TokenStatus, Unit, WordInfo,
 };
 use glossa_graph::mastery::{
     apply_grammar_exposure, apply_lexeme_exercise, apply_lexeme_exposure, effective_mastery,
@@ -417,15 +417,16 @@ pub struct LessonResult {
     pub streak: u32,
 }
 
-/// Mastery-weighted progress over a unit's target words.
-fn unit_progress(
-    unit: &Unit,
+/// Mastery-weighted progress over a set of lexemes (Known = full, Partial =
+/// half). Returns (known, partial, percent). Shared by units and vocab packs.
+fn progress_over(
+    lexemes: &[LexemeId],
     states: &HashMap<LexemeId, &LexemeState>,
     cfg: &GraphConfig,
     now: DateTime<Utc>,
 ) -> (usize, usize, u32) {
     let (mut known, mut partial, mut score) = (0usize, 0usize, 0.0f32);
-    for id in &unit.target_lexemes {
+    for id in lexemes {
         let m = states
             .get(id)
             .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
@@ -442,13 +443,23 @@ fn unit_progress(
             MasteryState::Unknown => {}
         }
     }
-    let total = unit.target_lexemes.len();
+    let total = lexemes.len();
     let percent = if total == 0 {
         0
     } else {
         ((score / total as f32) * 100.0).round() as u32
     };
     (known, partial, percent)
+}
+
+/// Mastery-weighted progress over a unit's target words.
+fn unit_progress(
+    unit: &Unit,
+    states: &HashMap<LexemeId, &LexemeState>,
+    cfg: &GraphConfig,
+    now: DateTime<Utc>,
+) -> (usize, usize, u32) {
+    progress_over(&unit.target_lexemes, states, cfg, now)
 }
 
 /// The learning roadmap: every unit with progress and lock state. A unit is
@@ -860,6 +871,440 @@ pub async fn next_content_for_unit(
     .await
 }
 
+// --- vocabulary packs (breadth track) ------------------------------------
+
+/// A pack as shown in the grid: progress over its words.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PackSummary {
+    pub id: i64,
+    pub title: String,
+    pub emoji: String,
+    pub description: String,
+    pub total: usize,
+    pub known: usize,
+    pub partial: usize,
+    pub percent: u32,
+}
+
+/// The flashcard deck for one pack: its words with the learner's status.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PackLesson {
+    pub id: i64,
+    pub title: String,
+    pub emoji: String,
+    pub description: String,
+    pub cards: Vec<UnitWord>,
+    pub percent: u32,
+}
+
+/// Every vocabulary pack with the learner's progress — the breadth-track
+/// equivalent of [`roadmap`]. Unlike units, packs aren't locked or ordered;
+/// they're browsable by interest.
+pub async fn vocab_packs(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<Vec<PackSummary>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let mut packs = store.vocab_packs(&language).await?;
+    packs.sort_by_key(|p| p.id);
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let states = lexeme_state_map(&states_vec);
+    let now = Utc::now();
+
+    Ok(packs
+        .into_iter()
+        .map(|p| {
+            let (known, partial, percent) = progress_over(&p.lexemes, &states, cfg, now);
+            PackSummary {
+                id: p.id.0,
+                title: p.title,
+                emoji: p.emoji,
+                description: p.description,
+                total: p.lexemes.len(),
+                known,
+                partial,
+                percent,
+            }
+        })
+        .collect())
+}
+
+/// The flashcard deck for one pack: each word with its meaning and current
+/// status, for the Study phase before the quiz.
+pub async fn pack_lesson(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    pack_id: i64,
+) -> Result<PackLesson> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let pack = store
+        .vocab_packs(&language)
+        .await?
+        .into_iter()
+        .find(|p| p.id.0 == pack_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("pack {pack_id}")))?;
+
+    let lexemes = store.lexemes(&language).await?;
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+    let id_status: HashMap<LexemeId, TokenStatus> = states_vec
+        .iter()
+        .map(|s| {
+            let m = effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery);
+            (s.lexeme_id, mastery_to_token(m))
+        })
+        .collect();
+
+    let cards: Vec<UnitWord> = pack
+        .lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).map(|l| (id, l)))
+        .map(|(id, l)| UnitWord {
+            lexeme_id: id.0,
+            lemma: l.lemma.clone(),
+            pos: l.pos,
+            gloss: l.gloss.clone(),
+            status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
+        })
+        .collect();
+
+    let (_, _, percent) = progress_over(&pack.lexemes, &lexeme_state_map(&states_vec), cfg, now);
+
+    Ok(PackLesson {
+        id: pack.id.0,
+        title: pack.title,
+        emoji: pack.emoji,
+        description: pack.description,
+        cards,
+        percent,
+    })
+}
+
+/// A multiple-choice quiz over a pack's words — the "learn new words" path.
+///
+/// Unlike [`review_session`] (which only revisits already-met words), this
+/// quizzes the pack's vocabulary regardless of status, **weakest/unseen first**,
+/// so answering it is how a brand-new word first enters the graph. Answers are
+/// recorded with the same [`record_exercise`] used everywhere else.
+pub async fn pack_quiz(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    pack_id: i64,
+    limit: usize,
+) -> Result<Vec<ReviewItem>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let pack = store
+        .vocab_packs(&language)
+        .await?
+        .into_iter()
+        .find(|p| p.id.0 == pack_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("pack {pack_id}")))?;
+
+    let lexemes = store.lexemes(&language).await?;
+    let states = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+    let confidence_of = |id: LexemeId| -> f32 {
+        states
+            .iter()
+            .find(|s| s.lexeme_id == id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery).confidence())
+            .unwrap_or(0.0)
+    };
+
+    // Pack words that can be quizzed (need a meaning), weakest/unseen first.
+    let mut candidates: Vec<&Lexeme> = pack
+        .lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).copied())
+        .filter(|l| l.gloss.is_some())
+        .collect();
+    candidates.sort_by(|a, b| {
+        confidence_of(a.id)
+            .partial_cmp(&confidence_of(b.id))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(limit);
+
+    let glossed: Vec<&Lexeme> = lexemes.iter().filter(|l| l.gloss.is_some()).collect();
+    let mut rng = rand::rng();
+    Ok(candidates
+        .into_iter()
+        .map(|lex| build_review_item(lex, &glossed, &mut rng))
+        .collect())
+}
+
+// --- user-authored decks (custom flashcards) -----------------------------
+
+/// First id handed to a user-created deck — a reserved range above any seeded id.
+const DECK_ID_BASE: i64 = 1_000_000_000;
+
+/// A deck as shown in the list: progress over its words.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeckSummary {
+    pub id: i64,
+    pub title: String,
+    pub emoji: String,
+    pub total: usize,
+    pub known: usize,
+    pub partial: usize,
+    pub percent: u32,
+}
+
+/// Find a deck by id, asserting it belongs to this learner.
+async fn owned_deck(store: &dyn Store, learner_id: LearnerId, deck_id: i64) -> Result<Deck> {
+    store
+        .decks(learner_id)
+        .await?
+        .into_iter()
+        .find(|d| d.id.0 == deck_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("deck {deck_id}")))
+}
+
+/// Every deck the learner owns (in their active language) with progress.
+pub async fn list_decks(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<Vec<DeckSummary>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let mut decks = store.decks(learner_id).await?;
+    decks.retain(|d| d.language == language);
+    decks.sort_by_key(|d| d.id);
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let states = lexeme_state_map(&states_vec);
+    let now = Utc::now();
+
+    Ok(decks
+        .into_iter()
+        .map(|d| {
+            let (known, partial, percent) = progress_over(&d.lexemes, &states, cfg, now);
+            DeckSummary {
+                id: d.id.0,
+                title: d.title,
+                emoji: d.emoji,
+                total: d.lexemes.len(),
+                known,
+                partial,
+                percent,
+            }
+        })
+        .collect())
+}
+
+/// Create a new empty deck in the learner's active language.
+pub async fn create_deck(
+    store: &dyn Store,
+    learner_id: LearnerId,
+    title: String,
+    emoji: String,
+) -> Result<DeckSummary> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let existing = store.decks(learner_id).await?;
+    let next = existing
+        .iter()
+        .map(|d| d.id.0)
+        .max()
+        .unwrap_or(DECK_ID_BASE - 1)
+        + 1;
+    let emoji = if emoji.trim().is_empty() { "📒".to_string() } else { emoji };
+    let deck = Deck {
+        id: DeckId(next),
+        learner_id,
+        language,
+        title: title.trim().to_string(),
+        emoji,
+        lexemes: Vec::new(),
+    };
+    store.upsert_deck(&deck).await?;
+    Ok(DeckSummary {
+        id: deck.id.0,
+        title: deck.title,
+        emoji: deck.emoji,
+        total: 0,
+        known: 0,
+        partial: 0,
+        percent: 0,
+    })
+}
+
+/// Delete a deck and the user words that belonged only to it.
+pub async fn delete_deck(store: &dyn Store, learner_id: LearnerId, deck_id: i64) -> Result<()> {
+    let deck = owned_deck(store, learner_id, deck_id).await?;
+    store.delete_user_lexemes(&deck.lexemes).await?;
+    store.delete_deck(deck.id).await?;
+    Ok(())
+}
+
+/// Add a word (term + meaning) to a deck, minting a user lexeme for it.
+pub async fn add_deck_word(
+    store: &dyn Store,
+    learner_id: LearnerId,
+    deck_id: i64,
+    lemma: String,
+    gloss: String,
+) -> Result<()> {
+    let mut deck = owned_deck(store, learner_id, deck_id).await?;
+    let lemma = lemma.trim().to_string();
+    if lemma.is_empty() {
+        return Err(ServiceError::NotFound("a word is required".into()));
+    }
+    let gloss = gloss.trim().to_string();
+    let id = LexemeId(store.reserve_user_lexeme_id().await?);
+    let lex = Lexeme {
+        id,
+        language: deck.language.clone(),
+        lemma,
+        pos: PartOfSpeech::Other,
+        frequency_rank: 0, // user words carry no frequency — kept out of selection
+        gloss: (!gloss.is_empty()).then_some(gloss),
+    };
+    store.upsert_user_lexemes(&[lex]).await?;
+    deck.lexemes.push(id);
+    store.upsert_deck(&deck).await?;
+    Ok(())
+}
+
+/// Remove a word from a deck and delete its user lexeme.
+pub async fn remove_deck_word(
+    store: &dyn Store,
+    learner_id: LearnerId,
+    deck_id: i64,
+    lexeme_id: i64,
+) -> Result<()> {
+    let mut deck = owned_deck(store, learner_id, deck_id).await?;
+    deck.lexemes.retain(|id| id.0 != lexeme_id);
+    store.upsert_deck(&deck).await?;
+    store.delete_user_lexemes(&[LexemeId(lexeme_id)]).await?;
+    Ok(())
+}
+
+/// A deck's flashcard deck (words + status) — serves both Study and the editor.
+pub async fn deck_lesson(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    deck_id: i64,
+) -> Result<PackLesson> {
+    let deck = owned_deck(store, learner_id, deck_id).await?;
+
+    let user_lexemes = store.user_lexemes(&deck.language).await?;
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = user_lexemes.iter().map(|l| (l.id, l)).collect();
+    let id_status: HashMap<LexemeId, TokenStatus> = states_vec
+        .iter()
+        .map(|s| {
+            let m = effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery);
+            (s.lexeme_id, mastery_to_token(m))
+        })
+        .collect();
+
+    let cards: Vec<UnitWord> = deck
+        .lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).map(|l| (id, l)))
+        .map(|(id, l)| UnitWord {
+            lexeme_id: id.0,
+            lemma: l.lemma.clone(),
+            pos: l.pos,
+            gloss: l.gloss.clone(),
+            status: id_status.get(id).copied().unwrap_or(TokenStatus::Unknown),
+        })
+        .collect();
+
+    let (_, _, percent) = progress_over(&deck.lexemes, &lexeme_state_map(&states_vec), cfg, now);
+    let n = cards.len();
+    Ok(PackLesson {
+        id: deck.id.0,
+        title: deck.title,
+        emoji: deck.emoji,
+        description: format!("{n} word{}", if n == 1 { "" } else { "s" }),
+        cards,
+        percent,
+    })
+}
+
+/// A multiple-choice quiz over a deck's words — the same "learn it" path as
+/// packs, but over the learner's own vocabulary. Distractors are drawn from the
+/// deck plus the seeded inventory of the same language, so options stay plausible.
+pub async fn deck_quiz(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    deck_id: i64,
+    limit: usize,
+) -> Result<Vec<ReviewItem>> {
+    let deck = owned_deck(store, learner_id, deck_id).await?;
+
+    let user_lexemes = store.user_lexemes(&deck.language).await?;
+    let states = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = user_lexemes.iter().map(|l| (l.id, l)).collect();
+    let confidence_of = |id: LexemeId| -> f32 {
+        states
+            .iter()
+            .find(|s| s.lexeme_id == id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery).confidence())
+            .unwrap_or(0.0)
+    };
+
+    let mut candidates: Vec<&Lexeme> = deck
+        .lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).copied())
+        .filter(|l| l.gloss.is_some())
+        .collect();
+    candidates.sort_by(|a, b| {
+        confidence_of(a.id)
+            .partial_cmp(&confidence_of(b.id))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(limit);
+
+    // Distractor pool: the deck's own words + the seeded inventory, same language.
+    let seeded = store.lexemes(&deck.language).await?;
+    let glossed: Vec<&Lexeme> = user_lexemes
+        .iter()
+        .chain(seeded.iter())
+        .filter(|l| l.gloss.is_some())
+        .collect();
+    let mut rng = rand::rng();
+    Ok(candidates
+        .into_iter()
+        .map(|lex| build_review_item(lex, &glossed, &mut rng))
+        .collect())
+}
+
 // --- review / spaced-repetition quiz -------------------------------------
 
 /// A single multiple-choice question: show the word, pick its meaning.
@@ -889,7 +1334,8 @@ pub async fn reviewable_count(
         .get_learner(learner_id)
         .await?
         .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
-    let lexemes = store.lexemes(&profile.target_language).await?;
+    let mut lexemes = store.lexemes(&profile.target_language).await?;
+    lexemes.extend(store.user_lexemes(&profile.target_language).await?);
     let has_gloss: HashMap<LexemeId, bool> =
         lexemes.iter().map(|l| (l.id, l.gloss.is_some())).collect();
     let now = Utc::now();
@@ -921,7 +1367,8 @@ pub async fn review_session(
         .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
     let language = profile.target_language;
 
-    let lexemes = store.lexemes(&language).await?;
+    let mut lexemes = store.lexemes(&language).await?;
+    lexemes.extend(store.user_lexemes(&language).await?);
     let states = store.lexeme_states(learner_id).await?;
     let now = Utc::now();
     let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
@@ -1230,6 +1677,104 @@ mod tests {
         }
         let rm2 = roadmap(&store, &cfg, learner.id).await.unwrap();
         assert_eq!(rm2[0].state, UnitState::Done, "got {:?}", rm2[0]);
+    }
+
+    #[tokio::test]
+    async fn vocab_pack_progress_lesson_and_quiz() {
+        use glossa_core::{PackId, VocabPack};
+        let store = FileStore::ephemeral().unwrap();
+        let cfg = GraphConfig::default();
+        store
+            .upsert_lexemes(&[lex(1, "pan", 1), lex(2, "leche", 2), lex(3, "café", 3)])
+            .await
+            .unwrap();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+        store
+            .upsert_vocab_packs(&[VocabPack {
+                id: PackId(1),
+                language: LanguageCode::spanish(),
+                title: "Food".into(),
+                emoji: "🍽️".into(),
+                description: "food words".into(),
+                lexemes: vec![LexemeId(1), LexemeId(2), LexemeId(3)],
+            }])
+            .await
+            .unwrap();
+
+        // Fresh learner → pack at 0%, all three cards present.
+        let packs = vocab_packs(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(packs.len(), 1);
+        assert_eq!(packs[0].percent, 0);
+        let lesson = pack_lesson(&store, &cfg, learner.id, 1).await.unwrap();
+        assert_eq!(lesson.cards.len(), 3);
+        assert_eq!(lesson.emoji, "🍽️");
+
+        // The quiz offers the pack's words (weakest/unseen first) and answering
+        // one moves it into the graph — the "learn new words" path.
+        let quiz = pack_quiz(&store, &cfg, learner.id, 1, 10).await.unwrap();
+        assert_eq!(quiz.len(), 3, "all glossed pack words are quizzable");
+        record_exercise(&store, &cfg, learner.id, quiz[0].lexeme_id, true)
+            .await
+            .unwrap();
+        let after = vocab_packs(&store, &cfg, learner.id).await.unwrap();
+        assert!(after[0].percent > 0, "answering seeds pack progress");
+    }
+
+    #[tokio::test]
+    async fn custom_deck_lifecycle() {
+        let store = FileStore::ephemeral().unwrap();
+        let cfg = GraphConfig::default();
+        // A seeded word exists so distractors have a pool to draw from.
+        store.upsert_lexemes(&[lex(1, "casa", 1)]).await.unwrap();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+
+        // Create a deck and add the learner's own words.
+        let deck = create_deck(&store, learner.id, "German class".into(), "🇩🇪".into())
+            .await
+            .unwrap();
+        add_deck_word(&store, learner.id, deck.id, "perro".into(), "dog".into())
+            .await
+            .unwrap();
+        add_deck_word(&store, learner.id, deck.id, "gato".into(), "cat".into())
+            .await
+            .unwrap();
+
+        // The deck lists with two cards and lives in a reserved id range.
+        let decks = list_decks(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(decks.len(), 1);
+        assert_eq!(decks[0].total, 2);
+        assert!(decks[0].id >= 1_000_000_000, "deck id is in the reserved range");
+        let lesson = deck_lesson(&store, &cfg, learner.id, deck.id).await.unwrap();
+        assert_eq!(lesson.cards.len(), 2);
+        assert!(lesson.cards[0].lexeme_id >= 1_000_000_000, "user lexeme id reserved");
+
+        // Quizzing a deck word seeds its mastery via the shared exercise path.
+        let quiz = deck_quiz(&store, &cfg, learner.id, deck.id, 10).await.unwrap();
+        assert_eq!(quiz.len(), 2);
+        record_exercise(&store, &cfg, learner.id, quiz[0].lexeme_id, true)
+            .await
+            .unwrap();
+        let after = list_decks(&store, &cfg, learner.id).await.unwrap();
+        assert!(after[0].percent > 0, "answering moves deck progress");
+
+        // The custom word is now reviewable in the global quiz too.
+        assert!(reviewable_count(&store, &cfg, learner.id).await.unwrap() >= 1);
+
+        // Removing a word and deleting the deck cleans up its user lexemes.
+        remove_deck_word(&store, learner.id, deck.id, quiz[1].lexeme_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            deck_lesson(&store, &cfg, learner.id, deck.id).await.unwrap().cards.len(),
+            1
+        );
+        delete_deck(&store, learner.id, deck.id).await.unwrap();
+        assert!(list_decks(&store, &cfg, learner.id).await.unwrap().is_empty());
+        assert!(store.user_lexemes(&LanguageCode::spanish()).await.unwrap().is_empty());
     }
 
     #[tokio::test]
