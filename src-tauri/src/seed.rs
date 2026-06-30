@@ -1777,13 +1777,12 @@ fn german_alphabet() -> Vec<SoundEntry> {
     .iter()
     .map(|(c, n)| letter(c, n))
     .collect();
-    // Umlauts: tap to hear the vowel sound. A bare "ä" makes TTS say its name,
-    // so we feed it "äh" (vowel + silent lengthening h) to voice the long vowel.
-    v.push(letter_say("Ä", "ä — like 'e' in 'bed'", "äh"));
-    v.push(letter_say("Ö", "ö — like 'i' in 'bird', rounded", "öh"));
-    v.push(letter_say("Ü", "ü — 'ee' with rounded lips", "üh"));
-    // ß has no sound of its own beyond a sharp 's'.
-    v.push(letter_say("ß", "ß — a sharp 's' (= ss)", "ss"));
+    // Umlauts + ß: same as the Sounds view — demonstrated by an example word,
+    // since a bare umlaut makes TTS read its name.
+    v.push(rule("Alphabet", "Ä", "like 'e' in 'bed'", "Mädchen", "girl"));
+    v.push(rule("Alphabet", "Ö", "like 'i' in 'bird', with rounded lips", "schön", "beautiful"));
+    v.push(rule("Alphabet", "Ü", "say 'ee' with rounded lips", "über", "over"));
+    v.push(rule("Alphabet", "ß", "a sharp 's' — never starts a word", "Straße", "street"));
     v
 }
 
