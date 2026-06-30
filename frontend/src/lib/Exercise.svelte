@@ -1,7 +1,8 @@
 <script>
-	// One exercise, any kind. Multiple-choice (choose_meaning / choose_word) or
-	// typed production (type_answer). Owns its answered state and feedback; calls
-	// onAnswer(correct) once so the parent can record + advance.
+	// One exercise, any kind: multiple-choice (choose_meaning / choose_word /
+	// listen_choose), typed production (type_answer), or dictation (listen_type).
+	// Owns its answered state and feedback; calls onAnswer(correct) once.
+	import { onMount } from 'svelte';
 	import { speak } from '$lib/audio.js';
 	import { posLabel } from '$lib/pos.js';
 
@@ -14,9 +15,17 @@
 
 	// Match the backend's lenient checking: lowercase, trim, strip diacritics.
 	const norm = (s) => s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-	const isMC = $derived(item.kind === 'choose_meaning' || item.kind === 'choose_word');
-	// The target word (to pronounce): the prompt for recognition, else the answer.
+	const isListen = $derived(item.kind === 'listen_choose' || item.kind === 'listen_type');
+	const isMC = $derived(
+		item.kind === 'choose_meaning' || item.kind === 'choose_word' || item.kind === 'listen_choose'
+	);
+	// The target word (to pronounce): the prompt for choose_meaning, else the answer.
 	const word = $derived(item.kind === 'choose_meaning' ? item.prompt : item.answer);
+
+	// Listening exercises play the word on arrival.
+	onMount(() => {
+		if (isListen) speak(word, lang);
+	});
 
 	function chooseMC(i) {
 		if (answered) return;
@@ -48,13 +57,22 @@
 
 <div class="ex">
 	<div class="instruction">{item.instruction}</div>
-	<div class="prompt-row">
-		<div class="prompt">{item.prompt}</div>
-		{#if posLabel(item.pos)}<span class="pos-tag">{posLabel(item.pos)}</span>{/if}
-		{#if item.kind === 'choose_meaning'}
-			<button class="iconbtn" title="Listen" onclick={() => speak(word, lang)}>🔊</button>
-		{/if}
-	</div>
+
+	{#if isListen}
+		<div class="listen-row">
+			<button class="play" title="Play" onclick={() => speak(word, lang)}>🔊</button>
+			{#if posLabel(item.pos)}<span class="pos-tag">{posLabel(item.pos)}</span>{/if}
+			<span class="muted">tap to hear it again</span>
+		</div>
+	{:else}
+		<div class="prompt-row">
+			<div class="prompt">{item.prompt}</div>
+			{#if posLabel(item.pos)}<span class="pos-tag">{posLabel(item.pos)}</span>{/if}
+			{#if item.kind === 'choose_meaning'}
+				<button class="iconbtn" title="Listen" onclick={() => speak(word, lang)}>🔊</button>
+			{/if}
+		</div>
+	{/if}
 
 	{#if isMC}
 		<div class="options">
@@ -68,7 +86,7 @@
 		<div class="type-row">
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
-				placeholder="type in {lang}…"
+				placeholder={isListen ? 'type what you hear…' : `type in ${lang}…`}
 				bind:value={typed}
 				disabled={answered}
 				onkeydown={onKey}
@@ -81,10 +99,11 @@
 
 	{#if answered}
 		<div class="feedback {correct ? 'ok' : 'no'}">
-			{#if correct}
-				✓ Correct
-			{:else}
-				✗ Answer: <strong>{item.answer}</strong>
+			{#if correct}✓ Correct{:else}✗{/if}
+			{#if isListen}
+				<span>it was <strong>{item.answer}</strong></span>
+			{:else if !correct}
+				<span>Answer: <strong>{item.answer}</strong></span>
 			{/if}
 			{#if item.kind !== 'choose_meaning'}
 				<button class="iconbtn" title="Listen" onclick={() => speak(word, lang)}>🔊</button>
@@ -110,6 +129,29 @@
 	.prompt {
 		font-size: 2rem;
 		font-weight: 700;
+	}
+	.listen-row {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		margin-top: 0.8rem;
+	}
+	.play {
+		width: 3.4rem;
+		height: 3.4rem;
+		border-radius: 50%;
+		font-size: 1.5rem;
+		border: 1px solid var(--accent);
+		background: var(--panel-2);
+		color: var(--accent);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.play:hover {
+		background: var(--accent);
+		color: #04201d;
 	}
 	.pos-tag {
 		font-size: 0.68rem;

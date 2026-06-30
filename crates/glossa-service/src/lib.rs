@@ -1783,6 +1783,10 @@ pub enum ExerciseKind {
     ChooseWord,
     /// Show the meaning, type the word (production).
     TypeAnswer,
+    /// Hear the word, pick its meaning (listening comprehension).
+    ListenChoose,
+    /// Hear the word, type it (dictation — sound → spelling).
+    ListenType,
 }
 
 /// One exercise. A superset of the old multiple-choice item: MC kinds fill
@@ -1922,21 +1926,41 @@ fn fold_diacritics(s: &str) -> String {
 /// while it's weak, production once it's strong — you produce what you can
 /// already recognize. A little randomness keeps a session varied.
 fn pick_kind(confidence: f32, rng: &mut impl Rng) -> ExerciseKind {
+    use ExerciseKind::*;
     let r: f32 = rng.random();
     if confidence < 0.34 {
-        if r < 0.8 { ExerciseKind::ChooseMeaning } else { ExerciseKind::ChooseWord }
-    } else if confidence < 0.7 {
+        // Weak: recognition only (reading + listening), no dictation yet.
         if r < 0.45 {
-            ExerciseKind::ChooseWord
-        } else if r < 0.75 {
-            ExerciseKind::ChooseMeaning
+            ChooseMeaning
+        } else if r < 0.72 {
+            ListenChoose
         } else {
-            ExerciseKind::TypeAnswer
+            ChooseWord
         }
-    } else if r < 0.6 {
-        ExerciseKind::TypeAnswer
+    } else if confidence < 0.70 {
+        // Medium: the full mix, easing in production and dictation.
+        if r < 0.22 {
+            ChooseWord
+        } else if r < 0.40 {
+            ChooseMeaning
+        } else if r < 0.60 {
+            ListenChoose
+        } else if r < 0.82 {
+            TypeAnswer
+        } else {
+            ListenType
+        }
     } else {
-        ExerciseKind::ChooseWord
+        // Strong: production-heavy (typing + dictation).
+        if r < 0.38 {
+            TypeAnswer
+        } else if r < 0.62 {
+            ListenType
+        } else if r < 0.84 {
+            ChooseWord
+        } else {
+            ListenChoose
+        }
     }
 }
 
@@ -1966,15 +1990,26 @@ fn build_exercise(
     let gloss = target.gloss.clone().unwrap_or_default();
     let mut pool: Vec<&Lexeme> = glossed.iter().copied().filter(|l| l.id != target.id).collect();
     pool.shuffle(rng);
+    let gloss_pool: Vec<String> = pool.iter().filter_map(|l| l.gloss.clone()).collect();
+    let lemma_pool: Vec<String> = pool.iter().map(|l| l.lemma.clone()).collect();
 
-    let mut mc = |prompt: String,
-                  answer: String,
-                  mut options: Vec<String>,
-                  instruction: &str|
-     -> Exercise {
-        options.push(answer.clone());
+    // Shuffle multiple-choice options around `correct`, returning them plus the
+    // index of the correct one.
+    let mut build_mc = |correct: &str, candidates: &[String]| -> (Vec<String>, usize) {
+        let mut options = distractors(candidates.iter().cloned(), correct, 3);
+        options.push(correct.to_string());
         options.shuffle(rng);
-        let answer_index = options.iter().position(|o| o == &answer).unwrap_or(0);
+        let idx = options.iter().position(|o| o == correct).unwrap_or(0);
+        (options, idx)
+    };
+
+    let ex = |instruction: &str,
+              prompt: String,
+              options: Vec<String>,
+              answer_index: usize,
+              answer: String,
+              accepts: Vec<String>|
+     -> Exercise {
         Exercise {
             lexeme_id: target.id.0,
             kind,
@@ -1984,32 +2019,32 @@ fn build_exercise(
             options,
             answer_index,
             answer,
-            accepts: Vec::new(),
+            accepts,
         }
     };
 
     match kind {
         ExerciseKind::ChooseMeaning => {
-            let opts = distractors(pool.iter().filter_map(|l| l.gloss.clone()), &gloss, 3);
-            mc(lemma, gloss, opts, "Pick the meaning")
+            let (options, idx) = build_mc(&gloss, &gloss_pool);
+            ex("Pick the meaning", lemma, options, idx, gloss, Vec::new())
         }
         ExerciseKind::ChooseWord => {
-            let opts = distractors(pool.iter().map(|l| l.lemma.clone()), &lemma, 3);
-            mc(gloss, lemma, opts, "Pick the word")
+            let (options, idx) = build_mc(&lemma, &lemma_pool);
+            ex("Pick the word", gloss, options, idx, lemma, Vec::new())
         }
         ExerciseKind::TypeAnswer => {
             let accepts = accepts_for(&lemma);
-            Exercise {
-                lexeme_id: target.id.0,
-                kind,
-                instruction: "Type the word".into(),
-                prompt: gloss,
-                pos: target.pos,
-                options: Vec::new(),
-                answer_index: 0,
-                answer: lemma,
-                accepts,
-            }
+            ex("Type the word", gloss, Vec::new(), 0, lemma, accepts)
+        }
+        // Listening kinds: no text prompt — the learner hears `answer` (the
+        // word) and identifies it. Pick its meaning, or type it (dictation).
+        ExerciseKind::ListenChoose => {
+            let (options, idx) = build_mc(&gloss, &gloss_pool);
+            ex("Listen and pick the meaning", String::new(), options, idx, lemma, Vec::new())
+        }
+        ExerciseKind::ListenType => {
+            let accepts = accepts_for(&lemma);
+            ex("Listen and type the word", String::new(), Vec::new(), 0, lemma, accepts)
         }
     }
 }
@@ -2497,6 +2532,17 @@ mod tests {
                 assert!(it.options.is_empty());
                 assert!(it.accepts.contains(&"yo".to_string()));
             }
+            ExerciseKind::ListenChoose => {
+                assert!(it.prompt.is_empty()); // heard, not shown
+                assert_eq!(it.answer, "yo"); // the word that was spoken
+                assert_eq!(it.options[it.answer_index], "yo-en"); // pick its meaning
+            }
+            ExerciseKind::ListenType => {
+                assert!(it.prompt.is_empty());
+                assert_eq!(it.answer, "yo");
+                assert!(it.options.is_empty());
+                assert!(it.accepts.contains(&"yo".to_string()));
+            }
         }
 
         record_exercise(&store, &cfg, learner.id, 1, true)
@@ -2527,5 +2573,15 @@ mod tests {
         assert_eq!(t.answer, "café");
         assert!(t.accepts.contains(&"cafe".to_string()));
         assert!(t.accepts.contains(&"café".to_string()));
+
+        // Listening: no visible prompt; the answer is the word, to be spoken.
+        let lc = build_exercise(&target, ExerciseKind::ListenChoose, &glossed, &mut rng);
+        assert!(lc.prompt.is_empty());
+        assert_eq!(lc.answer, "café");
+        assert_eq!(lc.options[lc.answer_index], "café-en"); // pick the meaning
+        let lt = build_exercise(&target, ExerciseKind::ListenType, &glossed, &mut rng);
+        assert!(lt.prompt.is_empty());
+        assert!(lt.options.is_empty());
+        assert!(lt.accepts.contains(&"cafe".to_string()));
     }
 }
