@@ -112,64 +112,143 @@ fn spanish_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         translation: tr.into(),
         note: None,
     };
-    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
+    let ex = |t: &str, tr: &str| ExampleSentence {
+        text: t.into(),
+        translation: tr.into(),
+    };
+    // A drill that teaches something after the answer (e.g. why it's irregular).
+    let dn = |prompt: &str, answer: &str, tr: &str, note: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+        note: Some(note.into()),
+    };
+    #[allow(clippy::too_many_arguments)]
+    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
-        example_template: ex.into(),
+        example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
-        examples: Vec::new(),
-        notes: Vec::new(),
+        examples,
+        notes: notes.iter().map(|s| s.to_string()).collect(),
         drills,
     };
     vec![
         p(1, "gender-articles", "Gender & articles (el / la)", "el libro, la casa, los niños, las mesas",
-          "Spanish nouns are masculine or feminine. Use 'el/un' with masculine nouns and 'la/una' with feminine ones; in the plural they become 'los/las'.",
-          &[], vec![
+          "Every Spanish noun is either masculine or feminine, and the words around it must match. 'the' is el (m.) or la (f.); 'a/an' is un (m.) or una (f.). In the plural they become los/las and unos/unas. The gender belongs to the word itself, so learn it together: la casa, el libro.",
+          &[],
+          vec![
+            ex("el libro, la casa", "the book, the house"),
+            ex("un amigo y una amiga", "a (male) friend and a (female) friend"),
+            ex("los niños y las mesas", "the children and the tables"),
+          ],
+          &[
+            "Most nouns ending in -o are masculine (el libro) and most ending in -a are feminine (la casa) — but watch for exceptions like el día (the day) and la mano (the hand).",
+            "The gender is grammatical, not about meaning: a table is la mesa, a book is el libro.",
+            "In the plural: el → los, la → las; un → unos, una → unas.",
+          ],
+          vec![
             d("___ libro es nuevo. (the, m.)", "el", "The book is new."),
             d("___ casa es grande. (the, f.)", "la", "The house is big."),
             d("Es ___ amigo. (a, m.)", "un", "He is a friend."),
             d("Es ___ mesa. (a, f.)", "una", "It is a table."),
           ]),
         p(2, "present-regular-ar", "Present tense: -ar verbs", "yo hablo, tú hablas, ella habla",
-          "Regular -ar verbs drop -ar and add endings: -o (I), -as (you), -a (he/she). E.g. hablar → hablo, hablas, habla.",
-          &[], vec![
+          "To conjugate a regular -ar verb, drop the -ar and add the endings -o (yo), -as (tú), -a (él/ella), -amos (nosotros), -an (ellos/ellas). So hablar → hablo, hablas, habla, hablamos, hablan.",
+          &[],
+          vec![
+            ex("yo hablo, tú hablas, ella habla", "I speak, you speak, she speaks"),
+            ex("Nosotros trabajamos en la ciudad.", "We work in the city."),
+          ],
+          &[
+            "Spanish usually drops the subject pronoun, because the ending already shows who's acting: 'hablo' on its own means 'I speak'.",
+            "One present tense covers both English forms — 'hablo' is both 'I speak' and 'I am speaking'.",
+            "The yo form of every regular verb ends in -o: hablo, trabajo, compro.",
+          ],
+          vec![
             d("Yo ___ español. (hablar)", "hablo", "I speak Spanish."),
             d("Ella ___ en la ciudad. (trabajar)", "trabaja", "She works in the city."),
             d("Nosotros ___ pan. (comprar)", "compramos", "We buy bread."),
             d("Tú ___ mucho. (hablar)", "hablas", "You speak a lot."),
           ]),
         p(3, "present-regular-er-ir", "Present tense: -er / -ir verbs", "yo como, tú comes, ella vive",
-          "Regular -er/-ir verbs use the endings -o, -es, -e. E.g. comer → como, comes, come.",
-          &[2], vec![
+          "Regular -er and -ir verbs share almost all their endings: -o, -es, -e, -en. They differ only in the 'we' form — -er verbs take -emos (comemos) while -ir verbs take -imos (vivimos). So comer → como, comes, come, comemos, comen; vivir → vivo, vives, vive, vivimos, viven.",
+          &[2],
+          vec![
+            ex("yo como, tú comes, ella come", "I eat, you eat, she eats"),
+            ex("Nosotros vivimos aquí.", "We live here."),
+          ],
+          &[
+            "-er and -ir verbs are identical except in the nosotros form: comemos vs vivimos.",
+            "As always, the subject pronoun is usually dropped: 'como' = 'I eat'.",
+          ],
+          vec![
             d("Yo ___ pan. (comer)", "como", "I eat bread."),
             d("Ella ___ leche. (beber)", "bebe", "She drinks milk."),
-            d("Nosotros ___ aquí. (vivir)", "vivimos", "We live here."),
+            dn("Nosotros ___ aquí. (vivir)", "vivimos", "We live here.",
+               "-ir verbs take -imos in the 'we' form (vivimos), where -er verbs take -emos (comemos)."),
             d("Tú ___ una manzana. (comer)", "comes", "You eat an apple."),
           ]),
         p(4, "ser-vs-estar", "To be: ser vs estar", "Soy estudiante. Estoy en casa.",
-          "Spanish has two verbs for 'to be': 'ser' for identity and lasting traits, 'estar' for location and temporary states.",
-          &[2], vec![
-            d("Yo ___ estudiante. (ser)", "soy", "I am a student."),
-            d("Ella ___ en casa. (estar)", "está", "She is at home."),
+          "Spanish has two verbs for 'to be'. Use ser for permanent or defining facts — identity, origin, profession, what something fundamentally is (Soy estudiante). Use estar for location and temporary states — where something is, or how it feels right now (Estoy en casa). Both are irregular.",
+          &[2],
+          vec![
+            ex("Soy estudiante. Estoy en casa.", "I am a student. I am at home."),
+            ex("Ella es alta, pero hoy está cansada.", "She is tall, but today she is tired."),
+          ],
+          &[
+            "Quick guide: ser for WHAT something is (lasting), estar for HOW or WHERE it is (temporary). 'Es aburrido' = he is boring; 'Está aburrido' = he is bored right now.",
+            "Location always uses estar, even for permanent things: Madrid está en España.",
+            "Both are irregular — ser: soy, eres, es, somos, son; estar: estoy, estás, está, estamos, están.",
+          ],
+          vec![
+            dn("Yo ___ estudiante. (ser)", "soy", "I am a student.",
+               "Profession and identity take ser — which is irregular: soy, eres, es."),
+            dn("Ella ___ en casa. (estar)", "está", "She is at home.",
+               "Location always takes estar (note the accent): está."),
             d("Nosotros ___ amigos. (ser)", "somos", "We are friends."),
-            d("Yo ___ feliz hoy. (estar)", "estoy", "I am happy today."),
+            dn("Yo ___ feliz hoy. (estar)", "estoy", "I am happy today.",
+               "A temporary feeling like 'happy today' uses estar: estoy."),
           ]),
         p(5, "plural-nouns", "Making nouns plural", "un gato, dos gatos; una flor, tres flores",
-          "Make nouns plural by adding -s after a vowel (gato → gatos) or -es after a consonant (flor → flores).",
-          &[1], vec![
+          "To make a Spanish noun plural, add -s if it ends in a vowel (gato → gatos) and -es if it ends in a consonant (flor → flores). The article goes plural too: el → los, la → las.",
+          &[1],
+          vec![
+            ex("un gato, dos gatos", "one cat, two cats"),
+            ex("una flor, tres flores", "one flower, three flowers"),
+          ],
+          &[
+            "Vowel ending → add -s (casa → casas); consonant ending → add -es (ciudad → ciudades).",
+            "A final -z becomes -c- before the plural ending: vez → veces, luz → luces.",
+            "Articles and adjectives go plural too, to agree: las casas blancas.",
+          ],
+          vec![
             d("un gato, dos ___ (gato)", "gatos", "one cat, two cats"),
             d("una flor, tres ___ (flor)", "flores", "one flower, three flowers"),
             d("un libro, dos ___ (libro)", "libros", "one book, two books"),
-            d("una vez, dos ___ (vez)", "veces", "one time, two times"),
+            dn("una vez, dos ___ (vez)", "veces", "one time, two times",
+               "Nouns ending in -z swap it for -c before -es: vez → veces."),
           ]),
         p(6, "preterite-regular-ar", "The past tense (-ar verbs)", "Ayer hablé y compré pan.",
-          "For completed past actions with -ar verbs, use the preterite: hablé (I spoke), hablaste (you spoke), habló (he/she spoke).",
-          &[2], vec![
-            d("Ayer yo ___ con un amigo. (hablar)", "hablé", "Yesterday I spoke with a friend."),
-            d("Ella ___ en la ciudad. (trabajar)", "trabajó", "She worked in the city."),
+          "For completed past actions with -ar verbs, use the preterite. Drop -ar and add -é (yo), -aste (tú), -ó (él/ella), -amos (nosotros), -aron (ellos). So hablar → hablé, hablaste, habló, hablamos, hablaron. The accents on hablé and habló mark the stress on the last syllable.",
+          &[2],
+          vec![
+            ex("Ayer hablé con un amigo.", "Yesterday I spoke with a friend."),
+            ex("Ella compró pan.", "She bought bread."),
+          ],
+          &[
+            "The accent changes the meaning: hablo (I speak, present) vs habló (he/she spoke, past); compro (I buy) vs compró (he/she bought).",
+            "The nosotros form (hablamos, compramos) looks the same in present and preterite — context tells you which: hoy compramos vs ayer compramos.",
+            "-car/-gar/-zar verbs change spelling in the yo form to keep their sound: buscar → busqué, llegar → llegué, empezar → empecé.",
+          ],
+          vec![
+            dn("Ayer yo ___ con un amigo. (hablar)", "hablé", "Yesterday I spoke with a friend.",
+               "The yo preterite ends in a stressed -é: hablé. Don't confuse it with hablo ('I speak', present)."),
+            dn("Ella ___ en la ciudad. (trabajar)", "trabajó", "She worked in the city.",
+               "The él/ella preterite ends in -ó with an accent: trabajó ('she worked'), not trabajo ('I work')."),
             d("Yo ___ pan ayer. (comprar)", "compré", "I bought bread yesterday."),
             d("Tú ___ mucho. (trabajar)", "trabajaste", "You worked a lot."),
           ]),
@@ -458,55 +537,123 @@ fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
         translation: tr.into(),
         note: None,
     };
-    let p = |n: i64, label: &str, title: &str, ex: &str, expl: &str, prereqs: &[i64], drills: Vec<GrammarDrill>| GrammarPattern {
+    let ex = |t: &str, tr: &str| ExampleSentence {
+        text: t.into(),
+        translation: tr.into(),
+    };
+    // A drill that teaches something after the answer (e.g. why it's irregular).
+    let dn = |prompt: &str, answer: &str, tr: &str, note: &str| GrammarDrill {
+        prompt: prompt.into(),
+        answer: answer.into(),
+        translation: tr.into(),
+        note: Some(note.into()),
+    };
+    #[allow(clippy::too_many_arguments)]
+    let p = |n: i64, label: &str, title: &str, ex_tmpl: &str, expl: &str, prereqs: &[i64], examples: Vec<ExampleSentence>, notes: &[&str], drills: Vec<GrammarDrill>| GrammarPattern {
         id: PatternId(base + n),
         language: language.clone(),
         label: label.into(),
         title: title.into(),
-        example_template: ex.into(),
+        example_template: ex_tmpl.into(),
         explanation: Some(expl.into()),
         prerequisites: prereqs.iter().map(|n| PatternId(base + n)).collect(),
-        examples: Vec::new(),
-        notes: Vec::new(),
+        examples,
+        notes: notes.iter().map(|s| s.to_string()).collect(),
         drills,
     };
     vec![
         p(1, "articles-le-la", "Gender & articles (le / la)", "le livre, la maison; un, une",
-          "French nouns are masculine or feminine. 'le/un' go with masculine nouns, 'la/une' with feminine ones.",
-          &[], vec![
+          "French nouns are masculine or feminine. 'the' is le (m.) or la (f.), and both shorten to l' before a vowel sound (l'ami, l'eau). 'a/an' is un (m.) or une (f.). The plural 'the' is les for every gender. Gender is part of the word, so learn it together: la maison, le livre.",
+          &[],
+          vec![
+            ex("le livre, la maison", "the book, the house"),
+            ex("un homme et une femme", "a man and a woman"),
+            ex("l'ami, les amis", "the friend, the friends"),
+          ],
+          &[
+            "Before a vowel or a silent h, le and la both shorten to l': l'eau, l'homme.",
+            "There's no reliable rule for gender — memorise it with the noun (la table, le livre).",
+            "The plural article is les for both genders: les hommes, les femmes.",
+          ],
+          vec![
             d("___ livre est sur la table. (the, m.)", "le", "The book is on the table."),
             d("___ maison est grande. (the, f.)", "la", "The house is big."),
             d("C'est ___ ami. (a, m.)", "un", "He is a friend."),
             d("C'est ___ pomme. (a, f.)", "une", "It's an apple."),
           ]),
         p(2, "present-er-verbs", "Present tense: -er verbs", "je parle, tu parles, il parle",
-          "Regular -er verbs drop -er and add -e, -es, -e: parler → je parle, tu parles, il parle.",
-          &[], vec![
+          "Regular -er verbs are the largest group. Drop -er and add -e (je), -es (tu), -e (il/elle), -ons (nous), -ez (vous), -ent (ils/elles). So parler → je parle, tu parles, il parle, nous parlons, ils parlent.",
+          &[],
+          vec![
+            ex("je parle, tu parles, il parle", "I speak, you speak, he speaks"),
+            ex("Nous mangeons du pain.", "We eat bread."),
+          ],
+          &[
+            "The -e, -es, and -ent endings are all silent — je parle, tu parles, and ils parlent sound identical. Only nous (-ons) and vous (-ez) sound different.",
+            "Verbs in -ger keep an e in the nous form to preserve the soft g (manger → nous mangeons); -cer verbs take a ç (commencer → nous commençons).",
+          ],
+          vec![
             d("Je ___ français. (parler)", "parle", "I speak French."),
             d("Elle ___ en ville. (travailler)", "travaille", "She works in the city."),
-            d("Nous ___ du pain. (manger)", "mangeons", "We eat bread."),
+            dn("Nous ___ du pain. (manger)", "mangeons", "We eat bread.",
+               "-ger verbs keep an e in the nous form to preserve the soft 'g' sound: mangeons, not 'mangons'."),
             d("Tu ___ beaucoup. (parler)", "parles", "You speak a lot."),
           ]),
         p(3, "etre-avoir", "To be & to have (être, avoir)", "je suis, j'ai",
-          "Two essential irregular verbs: être (to be) → je suis, tu es, il est; avoir (to have) → j'ai, tu as, il a.",
-          &[], vec![
-            d("Je ___ un ami. (être)", "suis", "I am a friend."),
-            d("Tu ___ une maison. (avoir)", "as", "You have a house."),
+          "être (to be) and avoir (to have) are the two most essential French verbs, and both are completely irregular. être: je suis, tu es, il/elle est, nous sommes, vous êtes, ils sont. avoir: j'ai, tu as, il/elle a, nous avons, vous avez, ils ont. They also build the past tense, so they're worth mastering early.",
+          &[],
+          vec![
+            ex("Je suis un ami. Tu es grand.", "I am a friend. You are tall."),
+            ex("J'ai un chien. Elle a une maison.", "I have a dog. She has a house."),
+          ],
+          &[
+            "Both are irregular — learn every form by heart.",
+            "Before a vowel, je becomes j': j'ai, not 'je ai'.",
+            "Don't mix them up: il est = he is; il a = he has.",
+          ],
+          vec![
+            dn("Je ___ un ami. (être)", "suis", "I am a friend.",
+               "être is irregular: je suis, tu es, il est."),
+            dn("Tu ___ une maison. (avoir)", "as", "You have a house.",
+               "avoir is irregular: j'ai, tu as, il a."),
             d("Il ___ content. (être)", "est", "He is happy."),
             d("Nous ___ un chat. (avoir)", "avons", "We have a cat."),
           ]),
         p(4, "negation-ne-pas", "Negation (ne … pas)", "je ne parle pas",
-          "To make a sentence negative, wrap the verb with ne ... pas: je parle → je ne parle pas.",
-          &[2], vec![
-            d("Je ne ___ pas français. (parler)", "parle", "I do not speak French."),
+          "To make a sentence negative, French wraps the conjugated verb in two parts: ne before it and pas after it. So je parle → je ne parle pas. Before a vowel, ne shortens to n': je n'ai pas.",
+          &[2],
+          vec![
+            ex("Je ne parle pas anglais.", "I do not speak English."),
+            ex("Il n'a pas de chien.", "He doesn't have a dog."),
+          ],
+          &[
+            "Both halves are needed in writing: ne before the verb, pas after. (Casual speech often drops ne, but keep it when writing.)",
+            "Before a vowel, ne becomes n': je n'ai pas, il n'est pas.",
+            "After a negative, un/une/du usually becomes de: j'ai un chien → je n'ai pas de chien.",
+          ],
+          vec![
+            dn("Je ne ___ pas français. (parler)", "parle", "I do not speak French.",
+               "The verb sits between ne and pas and is conjugated normally: je ne parle pas."),
             d("Il ne ___ pas. (manger)", "mange", "He does not eat."),
             d("Nous ne ___ pas. (travailler)", "travaillons", "We do not work."),
-            d("Tu ne ___ pas. (boire)", "bois", "You do not drink."),
+            dn("Tu ne ___ pas. (boire)", "bois", "You do not drink.",
+               "boire is irregular: je bois, tu bois, il boit."),
           ]),
         p(5, "plural-s", "Making nouns plural", "un livre, deux livres",
-          "Most French nouns add a (usually silent) -s in the plural: un livre → deux livres.",
-          &[1], vec![
-            d("un livre, deux ___ (livre)", "livres", "one book, two books"),
+          "Most French nouns add an -s to form the plural — but that -s is silent, so singular and plural usually sound the same (le livre / les livres). What you actually hear is the article changing: le, la, and l' all become les.",
+          &[1],
+          vec![
+            ex("un livre, deux livres", "one book, two books"),
+            ex("le chat, les chats", "the cat, the cats"),
+          ],
+          &[
+            "The plural -s is silent — you hear the difference in the article (le → les), not the noun.",
+            "Nouns already ending in -s, -x, or -z don't change: un fils, deux fils.",
+            "Some nouns take -x instead, especially those ending in -eau: un gâteau → deux gâteaux.",
+          ],
+          vec![
+            dn("un livre, deux ___ (livre)", "livres", "one book, two books",
+               "The plural -s is silent — livre and livres sound the same; the article (les) signals the plural."),
             d("un chat, trois ___ (chat)", "chats", "one cat, three cats"),
             d("une porte, deux ___ (porte)", "portes", "two doors"),
             d("un ami, deux ___ (ami)", "amis", "two friends"),
