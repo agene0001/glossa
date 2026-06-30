@@ -157,6 +157,40 @@ tables and a note on Phase-4 matching) is in
 
 ---
 
+## Future: speaking / pronunciation recognition (researched, not built)
+
+A Duolingo-style "say the word into the mic and get feedback" exercise was
+scoped but not built. The blocker is the platform, not the logic:
+
+- **The easy path doesn't work here.** Web Duolingo uses the browser
+  **Web Speech API** (`SpeechRecognition`). Our app runs in macOS **WKWebView**
+  (Tauri), which supports speech *synthesis* (our TTS) but **not** speech
+  *recognition*. So the trivial browser-mic version shows "not supported" in the
+  packaged app.
+- **Doing it properly needs native or local STT** — a meaningfully bigger lift
+  than the rest of the app (which is pure Rust/JS data + UI):
+  - **Local Whisper (`whisper.cpp`)** — capture mic audio in Rust, transcribe
+    with a bundled offline model, compare to the expected word. Best fit for the
+    "no API key / offline" stance, but adds an audio pipeline, mic permissions,
+    a ~75–150 MB model, and build complexity.
+  - **Native macOS `SFSpeechRecognizer`** — on-device, nothing to bundle, but
+    needs Rust↔Swift/ObjC interop and is macOS-only.
+  - **Cloud STT** (Whisper API, Deepgram, …) — easiest to wire, but a
+    network + API key + per-use cost we've otherwise avoided.
+- **"Grading pronunciation" is approximate.** Even Duolingo mostly does
+  *recognition + loose match* ("did it hear roughly the right word?"), not
+  phoneme-level scoring (a specialized ML service). Single-word recognition is
+  also the flakiest case for any recognizer.
+
+Recommended sequencing if revisited: (1) a cheap Web Speech API probe gated to
+"if available", to confirm the WKWebView gap on the target machine; (2) if it's
+unavailable (expected), decide whether **local Whisper** is worth the
+investment; (3) a no-recognition **"shadowing"** exercise (play the word → say
+it aloud → self-check) is a zero-dependency fallback that adds speaking practice
+today.
+
+---
+
 ## Note: building on an exFAT/NTFS volume (this machine)
 
 This repo lives on an exFAT volume, which can't store the extended attributes
