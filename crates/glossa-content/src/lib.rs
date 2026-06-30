@@ -17,8 +17,30 @@ pub use anthropic::{AnthropicContentGenerator, DEFAULT_MODEL};
 pub use mock::MockContentGenerator;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
-use glossa_core::{ContentRequest, GeneratedContent};
+use glossa_core::{ContentRequest, GeneratedContent, LanguageCode, PartOfSpeech};
+
+/// A request to turn the learner's English input into target-language vocabulary.
+/// `count == 0` means "translate exactly the word(s) typed"; `count > 0` means
+/// "suggest that many words on this topic".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VocabRequest {
+    pub language: LanguageCode,
+    pub native_language: LanguageCode,
+    pub query: String,
+    pub count: usize,
+}
+
+/// One suggested vocabulary entry from the generator.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SuggestedWord {
+    /// The word in the target language (nouns include their article: "der Tisch").
+    pub term: String,
+    /// A short meaning in the learner's native language.
+    pub gloss: String,
+    pub pos: Option<PartOfSpeech>,
+}
 
 /// Errors a generator can raise.
 #[derive(Debug, thiserror::Error)]
@@ -44,4 +66,9 @@ pub type Result<T> = std::result::Result<T, ContentError>;
 #[async_trait]
 pub trait ContentGenerator: Send + Sync {
     async fn generate(&self, request: &ContentRequest) -> Result<GeneratedContent>;
+
+    /// Translate / suggest target-language vocabulary from the learner's English
+    /// input, for the "add words by English" flow. Offline generators that can't
+    /// translate should return [`ContentError::Config`].
+    async fn suggest_vocab(&self, request: &VocabRequest) -> Result<Vec<SuggestedWord>>;
 }

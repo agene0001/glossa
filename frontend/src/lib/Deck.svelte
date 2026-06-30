@@ -4,7 +4,7 @@
 	import { speak } from '$lib/audio.js';
 	import StudyQuiz from '$lib/StudyQuiz.svelte';
 
-	let { deckId, lang = 'es', onBack } = $props();
+	let { deckId, lang = 'es', live = false, onBack } = $props();
 
 	let lesson = $state(null);
 	let error = $state('');
@@ -14,6 +14,13 @@
 
 	let newLemma = $state('');
 	let newGloss = $state('');
+
+	// "Add from English" (AI) state.
+	let aiQuery = $state('');
+	let aiBusy = $state(false);
+	let aiAdding = $state(false);
+	let aiError = $state('');
+	let suggestions = $state([]);
 
 	async function load() {
 		error = '';
@@ -56,6 +63,45 @@
 			busy = false;
 		}
 	}
+	async function suggest(count) {
+		const q = aiQuery.trim();
+		if (!q || aiBusy) return;
+		aiBusy = true;
+		aiError = '';
+		suggestions = [];
+		try {
+			suggestions = await api.suggestWords(q, count);
+		} catch (e) {
+			aiError = String(e);
+		} finally {
+			aiBusy = false;
+		}
+	}
+	async function addSuggestion(s) {
+		aiAdding = true;
+		try {
+			await api.addDeckWord(deckId, s.term, s.gloss);
+			suggestions = suggestions.filter((x) => x !== s);
+			await load();
+		} catch (e) {
+			aiError = String(e);
+		} finally {
+			aiAdding = false;
+		}
+	}
+	async function addAll() {
+		aiAdding = true;
+		try {
+			for (const s of suggestions) await api.addDeckWord(deckId, s.term, s.gloss);
+			suggestions = [];
+			await load();
+		} catch (e) {
+			aiError = String(e);
+		} finally {
+			aiAdding = false;
+		}
+	}
+
 	function play() {
 		if (lesson && lesson.cards.length) mode = 'play';
 	}
@@ -80,8 +126,44 @@
 	{#if mode === 'play'}
 		<StudyQuiz {lesson} {lang} loadQuiz={() => api.deckQuiz(deckId, 12)} onExit={backToEdit} exitLabel="Back to deck →" />
 	{:else}
+		{#if live}
+			<div class="card ai">
+				<div class="nw-label">✨ Add from English</div>
+				<div class="add-row">
+					<input
+						placeholder="an English word, or a topic like “kitchen”"
+						bind:value={aiQuery}
+						onkeydown={(e) => e.key === 'Enter' && suggest(0)}
+						disabled={aiBusy} />
+					<button class="primary" onclick={() => suggest(0)} disabled={aiBusy || !aiQuery.trim()}>Translate</button>
+					<button onclick={() => suggest(8)} disabled={aiBusy || !aiQuery.trim()}>Suggest a set</button>
+				</div>
+				<p class="muted hint">Type a word to translate it, or a topic to get a set of related words.</p>
+				{#if aiError}<div class="error" style="margin-top: 0.5rem;">{aiError}</div>{/if}
+				{#if aiBusy}<p class="muted" style="margin-top: 0.6rem;">Thinking…</p>{/if}
+				{#if suggestions.length}
+					<ul class="suggestions">
+						{#each suggestions as s (s.term)}
+							<li class="sug">
+								<button class="iconbtn" title="Listen" onclick={() => speak(s.term, lang)}>🔊</button>
+								<span class="sug-term">{s.term}</span>
+								<span class="sug-gloss">{s.gloss}{#if s.pos} · {s.pos}{/if}</span>
+								<button class="add-btn" onclick={() => addSuggestion(s)} disabled={aiAdding}>+ Add</button>
+							</li>
+						{/each}
+					</ul>
+					<button class="link" onclick={addAll} disabled={aiAdding}>Add all {suggestions.length} →</button>
+				{/if}
+			</div>
+		{:else}
+			<div class="card">
+				<div class="nw-label">✨ Add from English</div>
+				<p class="muted">Set <code>ANTHROPIC_API_KEY</code> and restart to translate English words (and whole topics) into your target language automatically.</p>
+			</div>
+		{/if}
+
 		<div class="card">
-			<div class="nw-label">Add a word</div>
+			<div class="nw-label">Add a word manually</div>
 			<div class="add-row">
 				<input
 					placeholder="word ({lang})"
@@ -140,6 +222,42 @@
 		background: var(--panel-2);
 		color: var(--text);
 		font: inherit;
+	}
+	.ai {
+		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	}
+	.hint {
+		font-size: 0.82rem;
+		margin-top: 0.5rem;
+	}
+	.suggestions {
+		list-style: none;
+		margin: 0.9rem 0 0.6rem;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.sug {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--border);
+		border-radius: 9px;
+		background: var(--panel-2);
+	}
+	.sug-term {
+		font-weight: 600;
+	}
+	.sug-gloss {
+		color: var(--muted);
+		flex: 1;
+		font-size: 0.9rem;
+	}
+	.add-btn {
+		font-size: 0.85rem;
+		padding: 0.3rem 0.7rem;
 	}
 	.words {
 		list-style: none;

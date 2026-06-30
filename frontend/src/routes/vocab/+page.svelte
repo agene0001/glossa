@@ -7,12 +7,14 @@
 	import Deck from '$lib/Deck.svelte';
 
 	let lang = $state('es');
+	let live = $state(false);
 	let selected = $state(null); // { type: 'pack' | 'deck', id }
 
 	onMount(async () => {
 		try {
 			const s = await api.backendStatus();
 			lang = s.language || 'es';
+			live = s.generator === 'anthropic';
 		} catch {
 			/* ignore */
 		}
@@ -29,7 +31,7 @@
 	{/key}
 {:else if selected?.type === 'deck'}
 	{#key selected.id}
-		<Deck deckId={selected.id} {lang} onBack={back} />
+		<Deck deckId={selected.id} {lang} {live} onBack={back} />
 	{/key}
 {:else}
 	<VocabPacks onOpen={openPack} />

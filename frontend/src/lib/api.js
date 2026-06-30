@@ -71,6 +71,10 @@ export const api = {
 	/** A multiple-choice quiz over a deck's words. */
 	deckQuiz: (deckId, limit = 12) => invoke('deck_quiz', { deckId, limit }),
 
+	/** Translate English input (count 0) or suggest a themed set (count > 0).
+	 * Returns [{ term, gloss, pos }]. Needs the AI engine (live mode). */
+	suggestWords: (query, count = 0) => invoke('suggest_words', { query, count }),
+
 	// --- languages ---
 
 	/** Languages that have seeded content: [{ code, name }]. */

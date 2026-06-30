@@ -9,12 +9,18 @@ use async_trait::async_trait;
 
 use glossa_core::{ContentRequest, GeneratedContent};
 
-use crate::{ContentError, ContentGenerator, Result};
+use crate::{ContentError, ContentGenerator, Result, SuggestedWord, VocabRequest};
 
 pub struct MockContentGenerator;
 
 #[async_trait]
 impl ContentGenerator for MockContentGenerator {
+    async fn suggest_vocab(&self, _request: &VocabRequest) -> Result<Vec<SuggestedWord>> {
+        Err(ContentError::Config(
+            "translating words needs the AI engine — set ANTHROPIC_API_KEY to enable it".into(),
+        ))
+    }
+
     async fn generate(&self, request: &ContentRequest) -> Result<GeneratedContent> {
         let known: Vec<String> = request
             .known_vocab

@@ -292,6 +292,19 @@ async fn deck_quiz(
 }
 
 #[tauri::command]
+async fn suggest_words(
+    state: State<'_, AppState>,
+    query: String,
+    count: Option<usize>,
+) -> Result<Vec<service::WordSuggestion>, String> {
+    let (store, generator, learner) =
+        (state.store.clone(), state.generator.clone(), state.learner_id);
+    service::suggest_words(store.as_ref(), generator.as_ref(), learner, query, count.unwrap_or(0))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn grammar_track(
     state: State<'_, AppState>,
 ) -> Result<Vec<service::GrammarTrackItem>, String> {
@@ -421,6 +434,7 @@ pub fn run() {
             remove_deck_word,
             deck_lesson,
             deck_quiz,
+            suggest_words,
             grammar_track,
             grammar_lesson,
             record_grammar_exercise,

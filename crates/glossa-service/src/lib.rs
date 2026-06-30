@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use glossa_content::ContentGenerator;
+use glossa_content::{ContentGenerator, VocabRequest};
 use glossa_core::{
     ContentRequest, ContentResponse, Deck, DeckId, GrammarState, LanguageCode, LearnerId,
     LearnerProfile, Lexeme, LexemeId, LexemeState, MasteryState, PartOfSpeech, PatternId, Token,
@@ -1307,6 +1307,51 @@ pub async fn deck_quiz(
     Ok(candidates
         .into_iter()
         .map(|lex| build_exercise(lex, pick_kind(confidence_of(lex.id), &mut rng), &glossed, &mut rng))
+        .collect())
+}
+
+// --- AI vocabulary suggestions (add words by English) --------------------
+
+/// A suggested word for the "add from English" flow, ready to drop into a deck.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordSuggestion {
+    /// The target-language word (nouns include their article: "der Tisch").
+    pub term: String,
+    pub gloss: String,
+    /// Part of speech as a display string ("noun"), empty if unknown.
+    pub pos: String,
+}
+
+/// Translate the learner's English input into target-language vocabulary (or
+/// suggest a themed set when `count > 0`), for them to add to a deck. Read-only
+/// — nothing is saved until the learner adds a word via [`add_deck_word`].
+/// Requires the AI generator; the offline mock returns a config error.
+pub async fn suggest_words(
+    store: &dyn Store,
+    generator: &dyn ContentGenerator,
+    learner_id: LearnerId,
+    query: String,
+    count: usize,
+) -> Result<Vec<WordSuggestion>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+
+    let request = VocabRequest {
+        language: profile.target_language,
+        native_language: profile.native_language,
+        query,
+        count,
+    };
+    let words = generator.suggest_vocab(&request).await?;
+    Ok(words
+        .into_iter()
+        .map(|w| WordSuggestion {
+            term: w.term,
+            gloss: w.gloss,
+            pos: w.pos.map(|p| p.to_string()).unwrap_or_default(),
+        })
         .collect())
 }
 

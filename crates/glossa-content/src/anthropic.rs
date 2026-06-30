@@ -12,7 +12,7 @@ use serde_json::json;
 
 use glossa_core::{ContentKind, ContentRequest, GeneratedContent};
 
-use crate::{ContentError, ContentGenerator, Result};
+use crate::{ContentError, ContentGenerator, Result, SuggestedWord, VocabRequest};
 
 /// Default generation model. Override per-deployment with `GLOSSA_MODEL`.
 pub const DEFAULT_MODEL: &str = "claude-opus-4-8";
@@ -56,19 +56,21 @@ impl AnthropicContentGenerator {
     pub fn model(&self) -> &str {
         &self.model
     }
-}
 
-#[async_trait]
-impl ContentGenerator for AnthropicContentGenerator {
-    async fn generate(&self, request: &ContentRequest) -> Result<GeneratedContent> {
-        let (system, user) = build_prompts(request);
-
+    /// POST a structured-output request and return the model's text block.
+    /// Shared by content generation and vocabulary suggestion.
+    async fn post_structured(
+        &self,
+        system: &str,
+        user: &str,
+        format: serde_json::Value,
+    ) -> Result<String> {
         let body = json!({
             "model": self.model,
             "max_tokens": MAX_TOKENS,
             "system": system,
             "messages": [{ "role": "user", "content": user }],
-            "output_config": { "format": output_schema() },
+            "output_config": { "format": format },
         });
 
         let resp = self
@@ -93,16 +95,114 @@ impl ContentGenerator for AnthropicContentGenerator {
         if parsed.stop_reason.as_deref() == Some("refusal") {
             return Err(ContentError::Refusal);
         }
-
-        let text = parsed
+        parsed
             .content
             .into_iter()
             .find_map(|b| if b.kind == "text" { b.text } else { None })
-            .ok_or(ContentError::NoContent)?;
+            .ok_or(ContentError::NoContent)
+    }
+}
 
+#[async_trait]
+impl ContentGenerator for AnthropicContentGenerator {
+    async fn generate(&self, request: &ContentRequest) -> Result<GeneratedContent> {
+        let (system, user) = build_prompts(request);
+        let text = self.post_structured(&system, &user, output_schema()).await?;
         let wire: Wire =
             serde_json::from_str(&text).map_err(|e| ContentError::Parse(e.to_string()))?;
         Ok(wire.into())
+    }
+
+    async fn suggest_vocab(&self, request: &VocabRequest) -> Result<Vec<SuggestedWord>> {
+        let (system, user) = build_vocab_prompts(request);
+        let text = self.post_structured(&system, &user, vocab_schema()).await?;
+        let wire: VocabWire =
+            serde_json::from_str(&text).map_err(|e| ContentError::Parse(e.to_string()))?;
+        Ok(wire.words.into_iter().map(Into::into).collect())
+    }
+}
+
+/// JSON schema forcing a list of {term, gloss, pos} vocabulary entries.
+fn vocab_schema() -> serde_json::Value {
+    json!({
+        "type": "json_schema",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "words": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "term": { "type": "string" },
+                            "gloss": { "type": "string" },
+                            "pos": {
+                                "type": "string",
+                                "enum": [
+                                    "noun", "verb", "adjective", "adverb", "pronoun",
+                                    "preposition", "conjunction", "determiner", "numeral",
+                                    "interjection", "other"
+                                ]
+                            }
+                        },
+                        "required": ["term", "gloss", "pos"],
+                        "additionalProperties": false
+                    }
+                }
+            },
+            "required": ["words"],
+            "additionalProperties": false
+        }
+    })
+}
+
+fn build_vocab_prompts(req: &VocabRequest) -> (String, String) {
+    let lang = req.language.as_str();
+    let native = req.native_language.as_str();
+    let system = format!(
+        "You are a vocabulary assistant for a learner of language code '{lang}', whose native \
+         language is '{native}'. For every word you return, give:\n\
+         - term: the word in '{lang}'. For nouns, INCLUDE the definite article (e.g. German \
+           'der Tisch', 'die Tür', 'das Haus'). For verbs, give the infinitive.\n\
+         - gloss: a short meaning in '{native}' (a few words).\n\
+         - pos: the part of speech (noun, verb, adjective, adverb, pronoun, preposition, \
+           conjunction, determiner, numeral, interjection, or other).\n\
+         Use natural, common, everyday vocabulary, and return only real words in '{lang}'."
+    );
+    let query = req.query.trim();
+    let user = if req.count == 0 {
+        format!(
+            "Translate the following {native} word(s) into {lang}: \"{query}\". \
+             Return exactly one entry per distinct word — do not add extras."
+        )
+    } else {
+        format!(
+            "Return {} common, useful {lang} words related to this topic: \"{query}\".",
+            req.count
+        )
+    };
+    (system, user)
+}
+
+#[derive(Deserialize)]
+struct VocabWire {
+    words: Vec<VocabWord>,
+}
+
+#[derive(Deserialize)]
+struct VocabWord {
+    term: String,
+    gloss: String,
+    pos: String,
+}
+
+impl From<VocabWord> for SuggestedWord {
+    fn from(w: VocabWord) -> Self {
+        SuggestedWord {
+            term: w.term,
+            gloss: w.gloss,
+            pos: serde_json::from_value(json!(w.pos)).ok(),
+        }
     }
 }
 
