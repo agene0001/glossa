@@ -89,3 +89,35 @@ impl From<i64> for UnitId {
         Self(value)
     }
 }
+
+/// Identifies a themed vocabulary pack (the breadth track, parallel to units).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct PackId(pub i64);
+
+impl fmt::Display for PackId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<i64> for PackId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+/// Identifies a user-authored deck (the learner's own flashcard set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct DeckId(pub i64);
+
+impl fmt::Display for DeckId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<i64> for DeckId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}

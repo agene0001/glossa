@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use glossa_core::{
-    GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile, LearningEvent, Lexeme,
-    LexemeId, LexemeState, PatternId, Unit,
+    Deck, DeckId, GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile,
+    LearningEvent, Lexeme, LexemeId, LexemeState, PatternId, Unit, VocabPack,
 };
 
 /// A persisted story/sentence set. Mirrors the `stories` table (§6) plus the
@@ -90,6 +90,24 @@ pub trait Store: Send + Sync {
 
     async fn units(&self, language: &LanguageCode) -> Result<Vec<Unit>>;
     async fn upsert_units(&self, units: &[Unit]) -> Result<()>;
+
+    /// Themed vocabulary packs — the breadth track, seeded like units.
+    async fn vocab_packs(&self, language: &LanguageCode) -> Result<Vec<VocabPack>>;
+    async fn upsert_vocab_packs(&self, packs: &[VocabPack]) -> Result<()>;
+
+    // --- user-authored decks + their words -------------------------------
+
+    /// Words the learner defined themselves (kept apart from the seeded
+    /// inventory so they never enter frequency-ranked selection).
+    async fn user_lexemes(&self, language: &LanguageCode) -> Result<Vec<Lexeme>>;
+    async fn upsert_user_lexemes(&self, lexemes: &[Lexeme]) -> Result<()>;
+    async fn delete_user_lexemes(&self, ids: &[LexemeId]) -> Result<()>;
+    /// Atomically reserve a fresh, never-reused id for a new user lexeme.
+    async fn reserve_user_lexeme_id(&self) -> Result<i64>;
+
+    async fn decks(&self, learner: LearnerId) -> Result<Vec<Deck>>;
+    async fn upsert_deck(&self, deck: &Deck) -> Result<()>;
+    async fn delete_deck(&self, id: DeckId) -> Result<()>;
 
     // --- per-learner mastery state ---------------------------------------
 

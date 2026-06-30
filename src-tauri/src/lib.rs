@@ -184,6 +184,113 @@ async fn next_content_for_unit(
 }
 
 #[tauri::command]
+async fn vocab_packs(state: State<'_, AppState>) -> Result<Vec<service::PackSummary>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::vocab_packs(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn pack_lesson(
+    state: State<'_, AppState>,
+    pack_id: i64,
+) -> Result<service::PackLesson, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::pack_lesson(store.as_ref(), &cfg, learner, pack_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn pack_quiz(
+    state: State<'_, AppState>,
+    pack_id: i64,
+    limit: Option<usize>,
+) -> Result<Vec<service::ReviewItem>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::pack_quiz(store.as_ref(), &cfg, learner, pack_id, limit.unwrap_or(12))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn list_decks(state: State<'_, AppState>) -> Result<Vec<service::DeckSummary>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::list_decks(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_deck(
+    state: State<'_, AppState>,
+    title: String,
+    emoji: String,
+) -> Result<service::DeckSummary, String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    service::create_deck(store.as_ref(), learner, title, emoji)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_deck(state: State<'_, AppState>, deck_id: i64) -> Result<(), String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    service::delete_deck(store.as_ref(), learner, deck_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_deck_word(
+    state: State<'_, AppState>,
+    deck_id: i64,
+    lemma: String,
+    gloss: String,
+) -> Result<(), String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    service::add_deck_word(store.as_ref(), learner, deck_id, lemma, gloss)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_deck_word(
+    state: State<'_, AppState>,
+    deck_id: i64,
+    lexeme_id: i64,
+) -> Result<(), String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    service::remove_deck_word(store.as_ref(), learner, deck_id, lexeme_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn deck_lesson(
+    state: State<'_, AppState>,
+    deck_id: i64,
+) -> Result<service::PackLesson, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::deck_lesson(store.as_ref(), &cfg, learner, deck_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn deck_quiz(
+    state: State<'_, AppState>,
+    deck_id: i64,
+    limit: Option<usize>,
+) -> Result<Vec<service::ReviewItem>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::deck_quiz(store.as_ref(), &cfg, learner, deck_id, limit.unwrap_or(12))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn review_session(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -262,6 +369,16 @@ pub fn run() {
             unit_lesson,
             complete_unit_lesson,
             next_content_for_unit,
+            vocab_packs,
+            pack_lesson,
+            pack_quiz,
+            list_decks,
+            create_deck,
+            delete_deck,
+            add_deck_word,
+            remove_deck_word,
+            deck_lesson,
+            deck_quiz,
             available_languages,
             set_target_language,
             review_session,

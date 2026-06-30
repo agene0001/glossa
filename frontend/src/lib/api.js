@@ -37,6 +37,40 @@ export const api = {
 	/** Extra AI practice scoped to a unit's vocabulary. */
 	nextContentForUnit: (unitId) => invoke('next_content_for_unit', { unitId }),
 
+	// --- vocabulary packs (breadth track) ---
+
+	/** Themed vocab packs with progress: [{ id, title, emoji, percent, ... }]. */
+	vocabPacks: () => invoke('vocab_packs'),
+
+	/** A pack's flashcard deck (words + status). */
+	packLesson: (packId) => invoke('pack_lesson', { packId }),
+
+	/** A multiple-choice quiz over a pack's words (weakest/unseen first). */
+	packQuiz: (packId, limit = 12) => invoke('pack_quiz', { packId, limit }),
+
+	// --- user-authored decks (custom flashcards) ---
+
+	/** The learner's own decks with progress: [{ id, title, emoji, percent, ... }]. */
+	listDecks: () => invoke('list_decks'),
+
+	/** Create a new empty deck; returns its summary. */
+	createDeck: (title, emoji) => invoke('create_deck', { title, emoji }),
+
+	/** Delete a deck and the words that belonged only to it. */
+	deleteDeck: (deckId) => invoke('delete_deck', { deckId }),
+
+	/** Add a word (term + meaning) to a deck. */
+	addDeckWord: (deckId, lemma, gloss) => invoke('add_deck_word', { deckId, lemma, gloss }),
+
+	/** Remove a word from a deck. */
+	removeDeckWord: (deckId, lexemeId) => invoke('remove_deck_word', { deckId, lexemeId }),
+
+	/** A deck's flashcard deck (words + status). */
+	deckLesson: (deckId) => invoke('deck_lesson', { deckId }),
+
+	/** A multiple-choice quiz over a deck's words. */
+	deckQuiz: (deckId, limit = 12) => invoke('deck_quiz', { deckId, limit }),
+
 	// --- languages ---
 
 	/** Languages that have seeded content: [{ code, name }]. */

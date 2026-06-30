@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use glossa_core::{
-    ExampleSentence, GrammarPattern, LanguageCode, Lexeme, LexemeId, PartOfSpeech, PatternId,
-    ReadingPassage, Unit, UnitId,
+    ExampleSentence, GrammarPattern, LanguageCode, Lexeme, LexemeId, PackId, PartOfSpeech,
+    PatternId, ReadingPassage, Unit, UnitId, VocabPack,
 };
 use glossa_storage::{StorageError, Store};
 
@@ -37,6 +37,7 @@ pub async fn sync_inventory(store: &dyn Store) -> Result<(), StorageError> {
         ES_FREQUENCY,
         spanish_grammar,
         spanish_units,
+        spanish_packs,
     )
     .await?;
     seed_language(
@@ -46,11 +47,13 @@ pub async fn sync_inventory(store: &dyn Store) -> Result<(), StorageError> {
         FR_FREQUENCY,
         french_grammar,
         french_units,
+        french_packs,
     )
     .await?;
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn seed_language(
     store: &dyn Store,
     language: &LanguageCode,
@@ -58,6 +61,7 @@ async fn seed_language(
     frequency_json: &str,
     grammar_fn: fn(&LanguageCode, i64) -> Vec<GrammarPattern>,
     units_fn: fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<Unit>,
+    packs_fn: fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<VocabPack>,
 ) -> Result<(), StorageError> {
     let words: Vec<SeedWord> =
         serde_json::from_str(frequency_json).expect("bundled frequency json must be valid");
@@ -81,6 +85,9 @@ async fn seed_language(
         lexemes.iter().map(|l| (l.lemma.clone(), l.id)).collect();
     store
         .upsert_units(&units_fn(language, base, &lemma_to_id))
+        .await?;
+    store
+        .upsert_vocab_packs(&packs_fn(language, base, &lemma_to_id))
         .await?;
     Ok(())
 }
@@ -346,6 +353,44 @@ fn spanish_units(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexem
     ]
 }
 
+/// Themed vocabulary packs — the breadth track. Words are drawn from the same
+/// inventory the units use, but grouped by topic (and including many words no
+/// unit teaches), so a learner can grow vocabulary outside the grammar sequence.
+fn spanish_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<VocabPack> {
+    let pack = |n: i64, emoji: &str, title: &str, desc: &str, words: &[&str]| VocabPack {
+        id: PackId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        emoji: emoji.into(),
+        description: desc.into(),
+        lexemes: words.iter().filter_map(|w| ids.get(*w).copied()).collect(),
+    };
+    vec![
+        pack(1, "🍽️", "Food & Drink", "Order a meal and talk about what's on the table.",
+            &["comida", "fruta", "verdura", "carne", "pescado", "queso", "huevo", "arroz",
+              "sopa", "pan", "leche", "café", "manzana", "vino", "jugo", "azúcar", "sal", "agua"]),
+        pack(2, "✈️", "Travel & Places", "Find your way around town and on a trip.",
+            &["aeropuerto", "hotel", "restaurante", "tienda", "mercado", "banco", "hospital",
+              "parque", "baño", "ciudad", "país", "calle"]),
+        pack(3, "💼", "Work & Money", "Talk about jobs, school, and spending.",
+            &["trabajo", "dinero", "escuela", "banco", "comprar", "vender", "pagar", "trabajar", "viajar"]),
+        pack(4, "😀", "Feelings & Traits", "Describe how people and things are.",
+            &["feliz", "triste", "cansado", "enfermo", "fuerte", "débil", "bonito", "bueno", "malo", "importante"]),
+        pack(5, "🧍", "The Body", "Name the parts of the body.",
+            &["cabeza", "ojo", "boca", "mano", "pie", "brazo", "pierna", "corazón"]),
+        pack(6, "⏰", "Time & Days", "Talk about when things happen.",
+            &["tiempo", "año", "día", "vez", "hora", "minuto", "semana", "noche", "mañana",
+              "tarde", "hoy", "ayer", "ahora", "temprano"]),
+        pack(7, "🎨", "Colors", "Name colors to describe anything.",
+            &["color", "rojo", "azul", "verde", "negro", "blanco", "amarillo"]),
+        pack(8, "🗣️", "Handy Verbs", "Everyday verbs to get things done.",
+            &["necesitar", "usar", "ayudar", "buscar", "esperar", "aprender", "entender",
+              "recibir", "preguntar", "pagar", "viajar", "vender"]),
+        pack(9, "👨‍👩‍👧", "People & Family", "The people in your life.",
+            &["hombre", "mujer", "niño", "niña", "amigo", "amiga", "gente", "familia", "padre", "madre"]),
+    ]
+}
+
 // --- French --------------------------------------------------------------
 
 fn french_grammar(language: &LanguageCode, base: i64) -> Vec<GrammarPattern> {
@@ -475,6 +520,32 @@ fn french_units(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
     ]
 }
 
+fn french_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, LexemeId>) -> Vec<VocabPack> {
+    let pack = |n: i64, emoji: &str, title: &str, desc: &str, words: &[&str]| VocabPack {
+        id: PackId(base + n),
+        language: language.clone(),
+        title: title.into(),
+        emoji: emoji.into(),
+        description: desc.into(),
+        lexemes: words.iter().filter_map(|w| ids.get(*w).copied()).collect(),
+    };
+    vec![
+        pack(1, "🍽️", "Food & Drink", "Talk about food and drink.",
+            &["nourriture", "pain", "lait", "café", "pomme", "eau"]),
+        pack(2, "👨‍👩‍👧", "People & Family", "The people in your life.",
+            &["homme", "femme", "enfant", "ami", "amie", "famille", "père", "mère"]),
+        pack(3, "🏠", "Home & Things", "Things around the home.",
+            &["maison", "table", "porte", "livre", "chien", "chat"]),
+        pack(4, "🗣️", "Handy Verbs", "Everyday verbs to get things done.",
+            &["faire", "aller", "voir", "savoir", "pouvoir", "vouloir", "venir", "dire",
+              "parler", "manger", "boire", "habiter", "travailler", "acheter", "aimer", "lire"]),
+        pack(5, "🎨", "Describing", "Describe how things are.",
+            &["bon", "grand", "petit", "nouveau", "heureux", "rouge"]),
+        pack(6, "🏙️", "Places & Time", "Places and when things happen.",
+            &["ville", "rue", "jour", "nuit", "an", "temps", "monde"]),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,6 +575,31 @@ mod tests {
                 "unit '{}' resolved no target words",
                 u.title
             );
+        }
+    }
+
+    #[test]
+    fn vocab_packs_resolve_to_seeded_words() {
+        // Every pack must resolve most of its words, or it'd be a thin deck.
+        for (json, base, packs_fn) in [
+            (ES_FREQUENCY, 0i64, spanish_packs as fn(&LanguageCode, i64, &HashMap<String, LexemeId>) -> Vec<VocabPack>),
+            (FR_FREQUENCY, 1000, french_packs),
+        ] {
+            let words: Vec<SeedWord> = serde_json::from_str(json).unwrap();
+            let lang = LanguageCode::new(if base == 0 { "es" } else { "fr" });
+            let lemma_ids: HashMap<String, LexemeId> = words
+                .iter()
+                .enumerate()
+                .map(|(i, w)| (w.lemma.clone(), LexemeId(base + i as i64 + 1)))
+                .collect();
+            for p in packs_fn(&lang, base, &lemma_ids) {
+                assert!(
+                    p.lexemes.len() >= 5,
+                    "pack '{}' only resolved {} words",
+                    p.title,
+                    p.lexemes.len()
+                );
+            }
         }
     }
 }

@@ -22,6 +22,7 @@
 
 	const links = [
 		{ href: '/', label: 'Learn' },
+		{ href: '/vocab', label: 'Vocab' },
 		{ href: '/quiz', label: 'Quiz' },
 		{ href: '/review', label: 'Review' },
 		{ href: '/chat', label: 'Chat', tag: 'Phase 2' },

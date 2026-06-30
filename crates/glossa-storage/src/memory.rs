@@ -14,9 +14,18 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use glossa_core::{
-    GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile, LearningEvent, Lexeme,
-    LexemeId, LexemeState, PatternId, Unit,
+    Deck, DeckId, GrammarPattern, GrammarState, LanguageCode, LearnerId, LearnerProfile,
+    LearningEvent, Lexeme, LexemeId, LexemeState, PatternId, Unit, VocabPack,
 };
+
+/// First id handed out for user-authored lexemes — far above any seeded range
+/// (Spanish base 0, French base 1000, future languages 2000…), so custom words
+/// never collide with the reference inventory.
+const USER_LEXEME_BASE: i64 = 1_000_000_000;
+
+fn default_next_user_lexeme_id() -> i64 {
+    USER_LEXEME_BASE
+}
 
 use crate::{Result, StorageError, Store, StoredStory};
 
@@ -37,6 +46,14 @@ struct Db {
     grammar_patterns: Vec<GrammarPattern>,
     #[serde(default)]
     units: Vec<Unit>,
+    #[serde(default)]
+    vocab_packs: Vec<VocabPack>,
+    #[serde(default)]
+    user_lexemes: Vec<Lexeme>,
+    #[serde(default)]
+    decks: Vec<Deck>,
+    #[serde(default = "default_next_user_lexeme_id")]
+    next_user_lexeme_id: i64,
     /// learner -> (lexeme -> state)
     lexeme_states: HashMap<LearnerId, HashMap<LexemeId, LexemeState>>,
     /// learner -> (pattern -> state)
@@ -204,6 +221,97 @@ impl Store for FileStore {
                 db.units.push(unit.clone());
             }
         }
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn vocab_packs(&self, language: &LanguageCode) -> Result<Vec<VocabPack>> {
+        Ok(self
+            .read()
+            .vocab_packs
+            .iter()
+            .filter(|p| &p.language == language)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert_vocab_packs(&self, packs: &[VocabPack]) -> Result<()> {
+        let mut db = self.write();
+        for pack in packs {
+            if let Some(slot) = db.vocab_packs.iter_mut().find(|p| p.id == pack.id) {
+                *slot = pack.clone();
+            } else {
+                db.vocab_packs.push(pack.clone());
+            }
+        }
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn user_lexemes(&self, language: &LanguageCode) -> Result<Vec<Lexeme>> {
+        Ok(self
+            .read()
+            .user_lexemes
+            .iter()
+            .filter(|l| &l.language == language)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert_user_lexemes(&self, lexemes: &[Lexeme]) -> Result<()> {
+        let mut db = self.write();
+        for lex in lexemes {
+            if let Some(slot) = db.user_lexemes.iter_mut().find(|l| l.id == lex.id) {
+                *slot = lex.clone();
+            } else {
+                db.user_lexemes.push(lex.clone());
+            }
+        }
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn delete_user_lexemes(&self, ids: &[LexemeId]) -> Result<()> {
+        let mut db = self.write();
+        db.user_lexemes.retain(|l| !ids.contains(&l.id));
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn reserve_user_lexeme_id(&self) -> Result<i64> {
+        let mut db = self.write();
+        // Clamp guards a freshly-`Default`ed db (counter 0) into the reserved
+        // range, so user ids can never start inside a seeded inventory.
+        let id = db.next_user_lexeme_id.max(USER_LEXEME_BASE);
+        db.next_user_lexeme_id = id + 1;
+        self.persist(&db)?;
+        Ok(id)
+    }
+
+    async fn decks(&self, learner: LearnerId) -> Result<Vec<Deck>> {
+        Ok(self
+            .read()
+            .decks
+            .iter()
+            .filter(|d| d.learner_id == learner)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert_deck(&self, deck: &Deck) -> Result<()> {
+        let mut db = self.write();
+        if let Some(slot) = db.decks.iter_mut().find(|d| d.id == deck.id) {
+            *slot = deck.clone();
+        } else {
+            db.decks.push(deck.clone());
+        }
+        self.persist(&db)?;
+        Ok(())
+    }
+
+    async fn delete_deck(&self, id: DeckId) -> Result<()> {
+        let mut db = self.write();
+        db.decks.retain(|d| d.id != id);
         self.persist(&db)?;
         Ok(())
     }
