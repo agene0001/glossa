@@ -347,6 +347,14 @@ async fn record_exercise(
 }
 
 #[tauri::command]
+async fn learner_stats(state: State<'_, AppState>) -> Result<service::Stats, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::learner_stats(store.as_ref(), &cfg, learner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn reviewable_count(state: State<'_, AppState>) -> Result<usize, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
     service::reviewable_count(store.as_ref(), &cfg, learner)
@@ -420,6 +428,7 @@ pub fn run() {
             review_session,
             record_exercise,
             reviewable_count,
+            learner_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Glossa");

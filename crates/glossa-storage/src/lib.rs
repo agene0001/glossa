@@ -128,4 +128,11 @@ pub trait Store: Send + Sync {
 
     /// Timestamps of the learner's events, for streak/activity computations.
     async fn activity_dates(&self, learner: LearnerId) -> Result<Vec<DateTime<Utc>>>;
+
+    /// The learner's events with timestamps, newest order unspecified, for the
+    /// Stats view (accuracy, activity over time).
+    async fn learning_events(
+        &self,
+        learner: LearnerId,
+    ) -> Result<Vec<(DateTime<Utc>, LearningEvent)>>;
 }

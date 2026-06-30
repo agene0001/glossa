@@ -100,7 +100,10 @@ export const api = {
 	recordExercise: (lexemeId, correct) => invoke('record_exercise', { lexemeId, correct }),
 
 	/** How many learned words are available to review. */
-	reviewableCount: () => invoke('reviewable_count')
+	reviewableCount: () => invoke('reviewable_count'),
+
+	/** Read-only progress snapshot for the Stats dashboard. */
+	stats: () => invoke('learner_stats')
 };
 
 /** True when running inside the Tauri webview (vs. a plain browser tab). */

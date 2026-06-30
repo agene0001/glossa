@@ -27,7 +27,7 @@
 		{ href: '/quiz', label: 'Quiz' },
 		{ href: '/review', label: 'Review' },
 		{ href: '/chat', label: 'Chat', tag: 'Phase 2' },
-		{ href: '/stats', label: 'Stats', tag: 'soon' }
+		{ href: '/stats', label: 'Stats' }
 	];
 
 	const isActive = (href, path) => (href === '/' ? path === '/' : path.startsWith(href));

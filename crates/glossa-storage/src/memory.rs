@@ -390,6 +390,19 @@ impl Store for FileStore {
             .map(|e| e.created_at)
             .collect())
     }
+
+    async fn learning_events(
+        &self,
+        learner: LearnerId,
+    ) -> Result<Vec<(DateTime<Utc>, LearningEvent)>> {
+        Ok(self
+            .read()
+            .events
+            .iter()
+            .filter(|e| e.learner_id == learner)
+            .map(|e| (e.created_at, e.event.clone()))
+            .collect())
+    }
 }
 
 // `NotFound` is part of the public error surface; reference it so a strict

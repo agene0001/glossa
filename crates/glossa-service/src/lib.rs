@@ -1510,6 +1510,187 @@ fn lesson_title(p: &glossa_core::GrammarPattern) -> String {
     }
 }
 
+// --- stats ---------------------------------------------------------------
+
+/// One day's activity count, for the Stats heatmap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DayActivity {
+    /// ISO date, `YYYY-MM-DD` (UTC).
+    pub date: String,
+    pub count: usize,
+}
+
+/// A read-only snapshot of the learner's progress, for the Stats view. Pure
+/// aggregation over current mastery + the append-only event log — no new
+/// instrumentation, just the read side.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Stats {
+    // Vocabulary mastery over the seeded inventory.
+    pub words_known: usize,
+    pub words_partial: usize,
+    pub words_unknown: usize,
+    pub total_words: usize,
+    /// Words the learner added themselves (across their decks).
+    pub custom_words: usize,
+    // Grammar mastery.
+    pub grammar_known: usize,
+    pub grammar_partial: usize,
+    pub grammar_total: usize,
+    // Per-track progress, 0..=100 (mastery-weighted).
+    pub course_percent: u32,
+    pub vocab_percent: u32,
+    pub grammar_percent: u32,
+    // Engagement.
+    pub streak: u32,
+    pub active_days: usize,
+    pub total_exercises: usize,
+    pub correct_exercises: usize,
+    pub accuracy: u32,
+    /// The last 12 weeks of daily activity (oldest first), for a heatmap.
+    pub activity: Vec<DayActivity>,
+}
+
+/// Aggregate the learner's whole picture for the Stats dashboard.
+pub async fn learner_stats(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+) -> Result<Stats> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let lexemes = store.lexemes(&language).await?;
+    let user_lexemes = store.user_lexemes(&language).await?;
+    let states_vec = store.lexeme_states(learner_id).await?;
+    let states = lexeme_state_map(&states_vec);
+    let grammar_patterns = store.grammar_patterns(&language).await?;
+    let grammar_states = store.grammar_states(learner_id).await?;
+    let units = store.units(&language).await?;
+    let packs = store.vocab_packs(&language).await?;
+    let events = store.learning_events(learner_id).await?;
+    let now = Utc::now();
+
+    // Vocabulary mastery distribution over the seeded inventory.
+    let (mut words_known, mut words_partial) = (0usize, 0usize);
+    for l in &lexemes {
+        match states
+            .get(&l.id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+            .unwrap_or(MasteryState::Unknown)
+        {
+            MasteryState::Known => words_known += 1,
+            MasteryState::Partial { .. } => words_partial += 1,
+            MasteryState::Unknown => {}
+        }
+    }
+    let total_words = lexemes.len();
+    let words_unknown = total_words.saturating_sub(words_known + words_partial);
+
+    // Grammar mastery distribution.
+    let (mut grammar_known, mut grammar_partial, mut grammar_score) = (0usize, 0usize, 0.0f32);
+    for p in &grammar_patterns {
+        let m = grammar_states
+            .iter()
+            .find(|s| s.pattern_id == p.id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery))
+            .unwrap_or(MasteryState::Unknown);
+        match m {
+            MasteryState::Known => {
+                grammar_known += 1;
+                grammar_score += 1.0;
+            }
+            MasteryState::Partial { .. } => {
+                grammar_partial += 1;
+                grammar_score += 0.5;
+            }
+            MasteryState::Unknown => {}
+        }
+    }
+    let grammar_total = grammar_patterns.len();
+    let grammar_percent = if grammar_total == 0 {
+        0
+    } else {
+        ((grammar_score / grammar_total as f32) * 100.0).round() as u32
+    };
+
+    // Per-track vocabulary progress over the union of each track's words.
+    let union = |sets: &mut dyn Iterator<Item = LexemeId>| -> Vec<LexemeId> {
+        let mut v: Vec<LexemeId> = sets.collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+    let course_lexemes = union(&mut units.iter().flat_map(|u| u.target_lexemes.iter().copied()));
+    let pack_lexemes = union(&mut packs.iter().flat_map(|p| p.lexemes.iter().copied()));
+    let (_, _, course_percent) = progress_over(&course_lexemes, &states, cfg, now);
+    let (_, _, vocab_percent) = progress_over(&pack_lexemes, &states, cfg, now);
+
+    // Engagement from the event log.
+    let timestamps: Vec<DateTime<Utc>> = events.iter().map(|(d, _)| *d).collect();
+    let streak = compute_streak(&timestamps, now);
+
+    let (mut total_exercises, mut correct_exercises) = (0usize, 0usize);
+    for (_, ev) in &events {
+        let correct = match ev {
+            glossa_core::LearningEvent::ExerciseAnswered { correct, .. } => Some(*correct),
+            glossa_core::LearningEvent::GrammarExerciseAnswered { correct, .. } => Some(*correct),
+            _ => None,
+        };
+        if let Some(c) = correct {
+            total_exercises += 1;
+            if c {
+                correct_exercises += 1;
+            }
+        }
+    }
+    let accuracy = if total_exercises == 0 {
+        0
+    } else {
+        ((correct_exercises as f32 / total_exercises as f32) * 100.0).round() as u32
+    };
+
+    // Daily activity for the last 12 weeks (oldest first), for a heatmap.
+    let mut by_day: HashMap<chrono::NaiveDate, usize> = HashMap::new();
+    for (d, _) in &events {
+        *by_day.entry(d.date_naive()).or_default() += 1;
+    }
+    let active_days = by_day.len();
+    let today = now.date_naive();
+    let activity: Vec<DayActivity> = (0..84)
+        .rev()
+        .map(|i| {
+            let day = today - chrono::Duration::days(i);
+            DayActivity {
+                date: day.format("%Y-%m-%d").to_string(),
+                count: by_day.get(&day).copied().unwrap_or(0),
+            }
+        })
+        .collect();
+
+    Ok(Stats {
+        words_known,
+        words_partial,
+        words_unknown,
+        total_words,
+        custom_words: user_lexemes.len(),
+        grammar_known,
+        grammar_partial,
+        grammar_total,
+        course_percent,
+        vocab_percent,
+        grammar_percent,
+        streak,
+        active_days,
+        total_exercises,
+        correct_exercises,
+        accuracy,
+        activity,
+    })
+}
+
 // --- review / spaced-repetition quiz -------------------------------------
 
 /// What the learner is asked to do for one exercise. Recognition kinds are
@@ -2098,6 +2279,41 @@ mod tests {
         delete_deck(&store, learner.id, deck.id).await.unwrap();
         assert!(list_decks(&store, &cfg, learner.id).await.unwrap().is_empty());
         assert!(store.user_lexemes(&LanguageCode::spanish()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn stats_aggregate_mastery_and_activity() {
+        let store = FileStore::ephemeral().unwrap();
+        let cfg = GraphConfig::default();
+        store
+            .upsert_lexemes(&[lex(1, "yo", 1), lex(2, "comer", 2), lex(3, "pan", 3)])
+            .await
+            .unwrap();
+        let learner = default_learner(&store, LanguageCode::spanish(), LanguageCode::english())
+            .await
+            .unwrap();
+
+        // Empty to start.
+        let s0 = learner_stats(&store, &cfg, learner.id).await.unwrap();
+        assert_eq!(s0.total_words, 3);
+        assert_eq!(s0.words_known, 0);
+        assert_eq!(s0.total_exercises, 0);
+        assert_eq!(s0.activity.len(), 84);
+
+        // One known word + two exercises (one wrong) → distribution + accuracy.
+        set_lexeme_status(&store, learner.id, LexemeId(1), MasteryState::Known)
+            .await
+            .unwrap();
+        record_exercise(&store, &cfg, learner.id, 1, true).await.unwrap();
+        record_exercise(&store, &cfg, learner.id, 1, false).await.unwrap();
+
+        let s1 = learner_stats(&store, &cfg, learner.id).await.unwrap();
+        assert!(s1.words_known + s1.words_partial >= 1);
+        assert_eq!(s1.total_exercises, 2);
+        assert_eq!(s1.correct_exercises, 1);
+        assert_eq!(s1.accuracy, 50);
+        assert!(s1.active_days >= 1);
+        assert_eq!(s1.activity.last().unwrap().count, 2, "today has 2 events");
     }
 
     #[tokio::test]
