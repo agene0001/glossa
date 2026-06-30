@@ -1357,19 +1357,38 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
 // --- pronunciation guides (static reference, no learner state) -----------
 
 /// The pronunciation primer for a language, or `None` if we don't have one.
+/// Each guide is the alphabet + numbers + the sounds that differ from English.
 pub fn pronunciation_guide(language: &LanguageCode) -> Option<PronunciationGuide> {
-    let entries = match language.as_str() {
-        "de" => german_sounds(),
-        "es" => spanish_sounds(),
-        "fr" => french_sounds(),
+    let (intro, mut entries) = match language.as_str() {
+        "de" => (
+            "The German alphabet, its numbers, and the letters and sounds that differ most from English. Tap any letter, number, or word to hear it.",
+            german_alphabet(),
+        ),
+        "es" => (
+            "The Spanish alphabet and numbers, plus the handful of sounds that differ from English. Spanish is almost perfectly phonetic. Tap anything to hear it.",
+            spanish_alphabet(),
+        ),
+        "fr" => (
+            "The French alphabet and numbers, plus the sounds that trip up English speakers (and the many silent final letters). Tap anything to hear it.",
+            french_alphabet(),
+        ),
         _ => return None,
     };
-    let intro = match language.as_str() {
-        "de" => "German spelling is very regular — once you know the rules, you can pronounce almost any word on sight. Here are the letters and sounds that differ most from English.",
-        "es" => "Spanish is almost perfectly phonetic: letters nearly always make the same sound, and once you learn a handful of rules you can read anything aloud.",
-        "fr" => "French spelling looks intimidating but follows consistent rules — and crucially, many final letters are silent. Here's what trips up English speakers most.",
-        _ => "",
-    };
+    match language.as_str() {
+        "de" => {
+            entries.extend(german_numbers());
+            entries.extend(german_sounds());
+        }
+        "es" => {
+            entries.extend(spanish_numbers());
+            entries.extend(spanish_sounds());
+        }
+        "fr" => {
+            entries.extend(french_numbers());
+            entries.extend(french_sounds());
+        }
+        _ => {}
+    }
     Some(PronunciationGuide {
         language: language.clone(),
         intro: intro.into(),
@@ -1377,71 +1396,194 @@ pub fn pronunciation_guide(language: &LanguageCode) -> Option<PronunciationGuide
     })
 }
 
+/// A speakable sound entry (tapping the symbol pronounces it).
 fn sound(category: &str, symbol: &str, how: &str, example: &str, gloss: &str) -> SoundEntry {
     SoundEntry {
         category: category.into(),
         symbol: symbol.into(),
         sound: how.into(),
+        say: Some(symbol.into()),
         example: example.into(),
         example_gloss: gloss.into(),
     }
 }
 
+/// A spelling-rule entry whose "symbol" isn't a single pronounceable sound, so
+/// only the example is playable.
+fn rule(category: &str, symbol: &str, how: &str, example: &str, gloss: &str) -> SoundEntry {
+    SoundEntry {
+        category: category.into(),
+        symbol: symbol.into(),
+        sound: how.into(),
+        say: None,
+        example: example.into(),
+        example_gloss: gloss.into(),
+    }
+}
+
+/// One alphabet letter with its spoken name.
+fn letter(symbol: &str, name: &str) -> SoundEntry {
+    SoundEntry {
+        category: "Alphabet".into(),
+        symbol: symbol.into(),
+        sound: name.into(),
+        say: Some(symbol.into()),
+        example: String::new(),
+        example_gloss: String::new(),
+    }
+}
+
+/// One number: the digit, the spoken word, and the English meaning.
+fn number(digit: &str, word: &str, gloss: &str) -> SoundEntry {
+    SoundEntry {
+        category: "Numbers".into(),
+        symbol: digit.into(),
+        sound: String::new(),
+        say: Some(word.into()),
+        example: word.into(),
+        example_gloss: gloss.into(),
+    }
+}
+
+fn german_alphabet() -> Vec<SoundEntry> {
+    [
+        ("A", "ah"), ("B", "beh"), ("C", "tseh"), ("D", "deh"), ("E", "eh"), ("F", "eff"),
+        ("G", "geh"), ("H", "hah"), ("I", "ih"), ("J", "yott"), ("K", "kah"), ("L", "ell"),
+        ("M", "emm"), ("N", "enn"), ("O", "oh"), ("P", "peh"), ("Q", "kuh"), ("R", "err"),
+        ("S", "ess"), ("T", "teh"), ("U", "uh"), ("V", "fau"), ("W", "veh"), ("X", "iks"),
+        ("Y", "üpsilon"), ("Z", "tsett"), ("Ä", "a-Umlaut"), ("Ö", "o-Umlaut"),
+        ("Ü", "u-Umlaut"), ("ß", "Eszett (sharp s)"),
+    ]
+    .iter()
+    .map(|(c, n)| letter(c, n))
+    .collect()
+}
+
+fn spanish_alphabet() -> Vec<SoundEntry> {
+    [
+        ("A", "a"), ("B", "be"), ("C", "ce"), ("D", "de"), ("E", "e"), ("F", "efe"),
+        ("G", "ge"), ("H", "hache"), ("I", "i"), ("J", "jota"), ("K", "ka"), ("L", "ele"),
+        ("M", "eme"), ("N", "ene"), ("Ñ", "eñe"), ("O", "o"), ("P", "pe"), ("Q", "cu"),
+        ("R", "erre"), ("S", "ese"), ("T", "te"), ("U", "u"), ("V", "uve"), ("W", "uve doble"),
+        ("X", "equis"), ("Y", "ye"), ("Z", "zeta"),
+    ]
+    .iter()
+    .map(|(c, n)| letter(c, n))
+    .collect()
+}
+
+fn french_alphabet() -> Vec<SoundEntry> {
+    [
+        ("A", "a"), ("B", "bé"), ("C", "cé"), ("D", "dé"), ("E", "e"), ("F", "effe"),
+        ("G", "gé"), ("H", "ache"), ("I", "i"), ("J", "ji"), ("K", "ka"), ("L", "elle"),
+        ("M", "emme"), ("N", "enne"), ("O", "o"), ("P", "pé"), ("Q", "ku"), ("R", "erre"),
+        ("S", "esse"), ("T", "té"), ("U", "u"), ("V", "vé"), ("W", "double vé"), ("X", "ixe"),
+        ("Y", "i grec"), ("Z", "zède"),
+    ]
+    .iter()
+    .map(|(c, n)| letter(c, n))
+    .collect()
+}
+
+fn german_numbers() -> Vec<SoundEntry> {
+    [
+        ("0", "null"), ("1", "eins"), ("2", "zwei"), ("3", "drei"), ("4", "vier"),
+        ("5", "fünf"), ("6", "sechs"), ("7", "sieben"), ("8", "acht"), ("9", "neun"),
+        ("10", "zehn"), ("11", "elf"), ("12", "zwölf"), ("13", "dreizehn"), ("14", "vierzehn"),
+        ("15", "fünfzehn"), ("16", "sechzehn"), ("17", "siebzehn"), ("18", "achtzehn"),
+        ("19", "neunzehn"), ("20", "zwanzig"),
+    ]
+    .iter()
+    .map(|(d, w)| number(d, w, en_number(d)))
+    .collect()
+}
+
+fn spanish_numbers() -> Vec<SoundEntry> {
+    [
+        ("0", "cero"), ("1", "uno"), ("2", "dos"), ("3", "tres"), ("4", "cuatro"),
+        ("5", "cinco"), ("6", "seis"), ("7", "siete"), ("8", "ocho"), ("9", "nueve"),
+        ("10", "diez"), ("11", "once"), ("12", "doce"), ("13", "trece"), ("14", "catorce"),
+        ("15", "quince"), ("16", "dieciséis"), ("17", "diecisiete"), ("18", "dieciocho"),
+        ("19", "diecinueve"), ("20", "veinte"),
+    ]
+    .iter()
+    .map(|(d, w)| number(d, w, en_number(d)))
+    .collect()
+}
+
+fn french_numbers() -> Vec<SoundEntry> {
+    [
+        ("0", "zéro"), ("1", "un"), ("2", "deux"), ("3", "trois"), ("4", "quatre"),
+        ("5", "cinq"), ("6", "six"), ("7", "sept"), ("8", "huit"), ("9", "neuf"),
+        ("10", "dix"), ("11", "onze"), ("12", "douze"), ("13", "treize"), ("14", "quatorze"),
+        ("15", "quinze"), ("16", "seize"), ("17", "dix-sept"), ("18", "dix-huit"),
+        ("19", "dix-neuf"), ("20", "vingt"),
+    ]
+    .iter()
+    .map(|(d, w)| number(d, w, en_number(d)))
+    .collect()
+}
+
+/// The English word for a small number (for the Numbers section gloss).
+fn en_number(digit: &str) -> &'static str {
+    match digit {
+        "0" => "zero", "1" => "one", "2" => "two", "3" => "three", "4" => "four",
+        "5" => "five", "6" => "six", "7" => "seven", "8" => "eight", "9" => "nine",
+        "10" => "ten", "11" => "eleven", "12" => "twelve", "13" => "thirteen",
+        "14" => "fourteen", "15" => "fifteen", "16" => "sixteen", "17" => "seventeen",
+        "18" => "eighteen", "19" => "nineteen", "20" => "twenty",
+        _ => "",
+    }
+}
+
 fn german_sounds() -> Vec<SoundEntry> {
-    let s = sound;
     vec![
-        s("Vowels with umlauts", "ä", "like 'e' in 'bed'", "Mädchen", "girl"),
-        s("Vowels with umlauts", "ö", "like 'i' in 'bird', with rounded lips", "schön", "beautiful"),
-        s("Vowels with umlauts", "ü", "say 'ee' while rounding your lips", "über", "over"),
-        s("Special letters", "ß", "a sharp 's' (the same as 'ss')", "Straße", "street"),
-        s("Consonants", "w", "like English 'v'", "Wasser", "water"),
-        s("Consonants", "v", "usually like English 'f'", "Vater", "father"),
-        s("Consonants", "z", "like 'ts' in 'cats'", "Zeit", "time"),
-        s("Consonants", "j", "like English 'y'", "ja", "yes"),
-        s("Consonants", "s", "before a vowel, like English 'z'", "Sonne", "sun"),
-        s("Consonants", "r", "from the throat, like a soft gargle", "rot", "red"),
-        s("Consonants", "ch", "after a/o/u, a raspy throat sound (Scottish 'loch')", "Buch", "book"),
-        s("Consonants", "sch", "like English 'sh'", "Schule", "school"),
-        s("Vowel pairs", "ei", "like English 'eye'", "eins", "one"),
-        s("Vowel pairs", "ie", "like English 'ee'", "Liebe", "love"),
-        s("Vowel pairs", "eu", "like 'oy' in 'boy'", "neun", "nine"),
+        sound("Sounds that differ", "w", "like English 'v'", "Wasser", "water"),
+        sound("Sounds that differ", "v", "usually like English 'f'", "Vater", "father"),
+        sound("Sounds that differ", "z", "like 'ts' in 'cats'", "Zeit", "time"),
+        sound("Sounds that differ", "j", "like English 'y'", "ja", "yes"),
+        sound("Sounds that differ", "s", "before a vowel, like English 'z'", "Sonne", "sun"),
+        sound("Sounds that differ", "r", "from the throat, like a soft gargle", "rot", "red"),
+        sound("Sounds that differ", "ch", "after a/o/u, a raspy throat sound (Scottish 'loch')", "Buch", "book"),
+        sound("Sounds that differ", "sch", "like English 'sh'", "Schule", "school"),
+        sound("Vowel pairs", "ei", "like English 'eye'", "eins", "one"),
+        sound("Vowel pairs", "ie", "like English 'ee'", "Liebe", "love"),
+        sound("Vowel pairs", "eu", "like 'oy' in 'boy'", "neun", "nine"),
     ]
 }
 
 fn spanish_sounds() -> Vec<SoundEntry> {
-    let s = sound;
     vec![
-        s("Special letters", "ñ", "like 'ny' in 'canyon'", "niño", "child"),
-        s("Special letters", "ll", "like English 'y'", "llave", "key"),
-        s("Special letters", "rr", "a strongly rolled 'r'", "perro", "dog"),
-        s("Consonants", "j", "a raspy 'h' from the throat", "jardín", "garden"),
-        s("Consonants", "g", "before e/i, the same raspy 'h' as j", "gente", "people"),
-        s("Consonants", "h", "always silent", "hola", "hello"),
-        s("Consonants", "v", "sounds like 'b'", "vino", "wine"),
-        s("Consonants", "c", "before e/i, like 's' (or 'th' in Spain)", "ciudad", "city"),
-        s("Consonants", "z", "like 's' (or 'th' in Spain)", "azul", "blue"),
-        s("Consonants", "qu", "like 'k' — the u is silent", "queso", "cheese"),
-        s("Vowels", "a e i o u", "always pure and short: ah, eh, ee, oh, oo", "casa", "house"),
-        s("Stress", "´", "the accent mark shows the stressed syllable", "café", "coffee"),
+        sound("Sounds that differ", "ñ", "like 'ny' in 'canyon'", "niño", "child"),
+        sound("Sounds that differ", "ll", "like English 'y'", "llave", "key"),
+        sound("Sounds that differ", "rr", "a strongly rolled 'r'", "perro", "dog"),
+        sound("Sounds that differ", "j", "a raspy 'h' from the throat", "jardín", "garden"),
+        sound("Sounds that differ", "g", "before e/i, the same raspy 'h' as j", "gente", "people"),
+        sound("Sounds that differ", "h", "always silent", "hola", "hello"),
+        sound("Sounds that differ", "v", "sounds like 'b'", "vino", "wine"),
+        sound("Sounds that differ", "c", "before e/i, like 's' (or 'th' in Spain)", "ciudad", "city"),
+        sound("Sounds that differ", "z", "like 's' (or 'th' in Spain)", "azul", "blue"),
+        sound("Sounds that differ", "qu", "like 'k' — the u is silent", "queso", "cheese"),
+        sound("Vowels", "a e i o u", "always pure and short: ah, eh, ee, oh, oo", "casa", "house"),
+        rule("Stress", "´", "the accent mark shows the stressed syllable", "café", "coffee"),
     ]
 }
 
 fn french_sounds() -> Vec<SoundEntry> {
-    let s = sound;
     vec![
-        s("Spelling rules", "final consonants", "most final consonants are silent", "petit", "small"),
-        s("Spelling rules", "liaison", "a silent final consonant links onto a following vowel", "les amis", "the friends"),
-        s("Accented vowels", "é", "like 'ay' (closed e)", "café", "coffee"),
-        s("Accented vowels", "è / ê", "like 'e' in 'bed' (open e)", "père", "father"),
-        s("Special letters", "ç", "a soft 's'", "français", "French"),
-        s("Vowels", "u", "say 'ee' with rounded lips (like German ü)", "tu", "you"),
-        s("Vowels", "ou", "like English 'oo'", "nous", "we"),
-        s("Vowels", "eu", "like the vowel in 'her'", "deux", "two"),
-        s("Vowels", "nasal (an/en/on/in)", "the vowel passes through the nose, with no real 'n'", "pain", "bread"),
-        s("Consonants", "r", "from the back of the throat", "rouge", "red"),
-        s("Consonants", "gn", "like 'ny' in 'canyon'", "montagne", "mountain"),
-        s("Consonants", "ch", "like English 'sh'", "chat", "cat"),
-        s("Consonants", "h", "always silent", "homme", "man"),
+        rule("Spelling rules", "final consonants", "most final consonants are silent", "petit", "small"),
+        rule("Spelling rules", "liaison", "a silent final consonant links onto a following vowel", "les amis", "the friends"),
+        sound("Accented vowels", "é", "like 'ay' (closed e)", "café", "coffee"),
+        sound("Accented vowels", "è / ê", "like 'e' in 'bed' (open e)", "père", "father"),
+        sound("Special letters", "ç", "a soft 's'", "français", "French"),
+        sound("Vowels", "u", "say 'ee' with rounded lips (like German ü)", "tu", "you"),
+        sound("Vowels", "ou", "like English 'oo'", "nous", "we"),
+        sound("Vowels", "eu", "like the vowel in 'her'", "deux", "two"),
+        rule("Vowels", "nasal (an/en/on/in)", "the vowel passes through the nose, with no real 'n'", "pain", "bread"),
+        sound("Consonants", "r", "from the back of the throat", "rouge", "red"),
+        sound("Consonants", "gn", "like 'ny' in 'canyon'", "montagne", "mountain"),
+        sound("Consonants", "ch", "like English 'sh'", "chat", "cat"),
+        sound("Consonants", "h", "always silent", "homme", "man"),
     ]
 }
 

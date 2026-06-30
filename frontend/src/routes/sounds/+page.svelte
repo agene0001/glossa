@@ -61,13 +61,21 @@
 		<div class="card sounds">
 			{#each g.items as e (e.symbol)}
 				<div class="row">
-					<div class="symbol">{e.symbol}</div>
+					{#if e.say}
+						<button class="symbol speak" title="Play" onclick={() => speak(e.say, lang)}>{e.symbol}</button>
+					{:else}
+						<div class="symbol">{e.symbol}</div>
+					{/if}
 					<div class="how">{e.sound}</div>
-					<button class="ex" title="Listen" onclick={() => speak(e.example, lang)}>
-						<span class="ex-word">{e.example}</span>
-						<span class="ex-gloss">{e.example_gloss}</span>
-						<span class="spk">🔊</span>
-					</button>
+					{#if e.example}
+						<button class="ex" title="Listen" onclick={() => speak(e.example, lang)}>
+							<span class="ex-word">{e.example}</span>
+							{#if e.example_gloss}<span class="ex-gloss">{e.example_gloss}</span>{/if}
+							<span class="spk">🔊</span>
+						</button>
+					{:else if e.example_gloss}
+						<span class="ex-gloss only">{e.example_gloss}</span>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -105,6 +113,23 @@
 	.symbol {
 		font-size: 1.5rem;
 		font-weight: 700;
+	}
+	.symbol.speak {
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		color: var(--text);
+		cursor: pointer;
+		padding: 0.25rem 0;
+		font-family: inherit;
+	}
+	.symbol.speak:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.ex-gloss.only {
+		color: var(--muted);
+		font-size: 0.9rem;
 	}
 	.how {
 		color: var(--text);

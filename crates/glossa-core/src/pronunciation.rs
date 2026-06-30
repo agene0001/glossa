@@ -14,13 +14,18 @@ use crate::lang::LanguageCode;
 pub struct SoundEntry {
     /// A grouping heading, e.g. "Special letters", "Vowels".
     pub category: String,
-    /// The letter or combination, e.g. "ä", "ll", "ch".
+    /// The letter or combination, e.g. "ä", "ll", "ch", a digit, or a letter.
     pub symbol: String,
-    /// How it sounds, described for an English speaker.
+    /// How it sounds, described for an English speaker (may be empty).
     pub sound: String,
-    /// An example word in the target language.
+    /// What to pronounce when the learner taps the symbol — the letter/word
+    /// itself for speakable entries, `None` for spelling rules that aren't a
+    /// single pronounceable sound (e.g. "silent final consonants").
+    #[serde(default)]
+    pub say: Option<String>,
+    /// An example word in the target language (may be empty).
     pub example: String,
-    /// The example's meaning.
+    /// The example's meaning (may be empty).
     pub example_gloss: String,
 }
 
