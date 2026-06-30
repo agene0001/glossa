@@ -7,11 +7,23 @@
 	let loading = $state(true);
 	let error = $state('');
 
+	// Top-level views: the alphabet, the numbers, and the condensed
+	// special-cases reference (everything else).
+	const VIEWS = [
+		{ key: 'alphabet', label: 'Alphabet', match: (c) => c === 'Alphabet' },
+		{ key: 'numbers', label: 'Numbers', match: (c) => c === 'Numbers' },
+		{ key: 'sounds', label: 'Sounds', match: (c) => c !== 'Alphabet' && c !== 'Numbers' }
+	];
+	let view = $state('alphabet');
+
 	async function load() {
 		loading = true;
 		error = '';
 		try {
 			guide = await api.pronunciationGuide();
+			// Default to the first view this language actually has.
+			const first = VIEWS.find((v) => guide?.entries.some((e) => v.match(e.category)));
+			if (first) view = first.key;
 		} catch (e) {
 			error = String(e);
 		} finally {
@@ -20,11 +32,17 @@
 	}
 	onMount(load);
 
-	// Group entries by category, preserving order.
+	let availableViews = $derived(
+		guide ? VIEWS.filter((v) => guide.entries.some((e) => v.match(e.category))) : []
+	);
+
+	// Entries of the active view, grouped by their (sub-)category in order.
 	let grouped = $derived.by(() => {
 		if (!guide) return [];
+		const v = VIEWS.find((x) => x.key === view);
+		if (!v) return [];
 		const out = [];
-		for (const e of guide.entries) {
+		for (const e of guide.entries.filter((e) => v.match(e.category))) {
 			let g = out.find((x) => x.category === e.category);
 			if (!g) {
 				g = { category: e.category, items: [] };
@@ -39,8 +57,8 @@
 
 <div class="page-head">
 	<h1>Sounds &amp; spelling</h1>
-	<p>How the language is pronounced — the letters and sounds that differ from English. Tap a word
-		to hear it.</p>
+	<p>The alphabet, the numbers, and the sounds that differ from English — switch between them below.
+		Tap any letter, number, or word to hear it.</p>
 </div>
 
 {#if error}<div class="error">{error}</div>{/if}
@@ -56,8 +74,16 @@
 		<div class="card intro">{guide.intro}</div>
 	{/if}
 
+	{#if availableViews.length > 1}
+		<div class="toggle">
+			{#each availableViews as v (v.key)}
+				<button class:active={view === v.key} onclick={() => (view = v.key)}>{v.label}</button>
+			{/each}
+		</div>
+	{/if}
+
 	{#each grouped as g (g.category)}
-		<div class="cat">{g.category}</div>
+		{#if grouped.length > 1}<div class="cat">{g.category}</div>{/if}
 		<div class="card sounds">
 			{#each g.items as e (e.symbol)}
 				<div class="row">
@@ -85,6 +111,29 @@
 <style>
 	.intro {
 		line-height: 1.55;
+	}
+	.toggle {
+		display: inline-flex;
+		gap: 0.25rem;
+		padding: 0.25rem;
+		background: var(--panel-2);
+		border: 1px solid var(--border);
+		border-radius: 11px;
+		margin: 1.2rem 0 0.4rem;
+	}
+	.toggle button {
+		background: none;
+		border: none;
+		color: var(--muted);
+		font: inherit;
+		font-weight: 600;
+		padding: 0.4rem 1rem;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+	.toggle button.active {
+		background: var(--accent);
+		color: #04201d;
 	}
 	.cat {
 		font-size: 0.72rem;
