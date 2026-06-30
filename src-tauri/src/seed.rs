@@ -1872,6 +1872,11 @@ fn en_number(digit: &str) -> &'static str {
 
 fn german_sounds() -> Vec<SoundEntry> {
     vec![
+        // Umlauts + ß use an example word (a lone umlaut makes TTS say its name).
+        rule("Vowels with umlauts", "ä", "like 'e' in 'bed'", "Mädchen", "girl"),
+        rule("Vowels with umlauts", "ö", "like 'i' in 'bird', with rounded lips", "schön", "beautiful"),
+        rule("Vowels with umlauts", "ü", "say 'ee' with rounded lips", "über", "over"),
+        rule("Special letters", "ß", "a sharp 's' (= ss); never starts a word", "Straße", "street"),
         sound("Sounds that differ", "w", "like English 'v'", "Wasser", "water"),
         sound("Sounds that differ", "v", "usually like English 'f'", "Vater", "father"),
         sound("Sounds that differ", "z", "like 'ts' in 'cats'", "Zeit", "time"),
