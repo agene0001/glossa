@@ -1733,13 +1733,15 @@ fn rule(category: &str, symbol: &str, how: &str, example: &str, gloss: &str) -> 
     }
 }
 
-/// One alphabet letter with its spoken name.
+/// One alphabet letter with its spoken name. We speak the lowercase form: the
+/// letter name is the same, but a lone *uppercase* letter makes TTS announce
+/// the capitalization first ("Großbuchstabe A" / "capital A").
 fn letter(symbol: &str, name: &str) -> SoundEntry {
     SoundEntry {
         category: "Alphabet".into(),
         symbol: symbol.into(),
         sound: name.into(),
-        say: Some(symbol.into()),
+        say: Some(symbol.to_lowercase()),
         example: String::new(),
         example_gloss: String::new(),
     }
