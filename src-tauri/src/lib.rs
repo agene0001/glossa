@@ -16,7 +16,9 @@ use tauri::{Manager, State};
 use glossa_content::{
     AnthropicContentGenerator, ContentGenerator, MockContentGenerator, OfflineDictionary,
 };
-use glossa_core::{ContentResponse, LanguageCode, LearnerId, LexemeId, MasteryState};
+use glossa_core::{
+    ContentResponse, LanguageCode, LearnerId, LexemeId, MasteryState, PronunciationGuide,
+};
 use glossa_graph::{GraphConfig, GraphOverview};
 use glossa_service as service;
 use glossa_storage::{FileStore, Store};
@@ -66,6 +68,20 @@ async fn backend_status(state: State<'_, AppState>) -> Result<BackendStatus, Str
         streak,
         learner_id: learner.to_string(),
     })
+}
+
+/// The pronunciation primer for the learner's current language (or null).
+#[tauri::command]
+async fn pronunciation_guide(
+    state: State<'_, AppState>,
+) -> Result<Option<PronunciationGuide>, String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    let profile = store
+        .get_learner(learner)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "learner not found".to_string())?;
+    Ok(seed::pronunciation_guide(&profile.target_language))
 }
 
 /// Languages that have seeded content (for the picker).
@@ -461,6 +477,7 @@ pub fn run() {
             grammar_track,
             grammar_lesson,
             record_grammar_exercise,
+            pronunciation_guide,
             available_languages,
             set_target_language,
             review_session,

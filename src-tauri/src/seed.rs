@@ -12,7 +12,8 @@ use serde::Deserialize;
 
 use glossa_core::{
     ExampleSentence, GrammarDrill, GrammarPattern, LanguageCode, Lexeme, LexemeId, PackId,
-    PartOfSpeech, PatternId, ReadingPassage, Unit, UnitId, VocabPack,
+    PartOfSpeech, PatternId, PronunciationGuide, ReadingPassage, SoundEntry, Unit, UnitId,
+    VocabPack,
 };
 use glossa_storage::{StorageError, Store};
 
@@ -1350,6 +1351,97 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
               "rot", "blau", "grün", "schwarz", "weiß", "gelb"]),
         pack(6, "⏰", "Time & Days", "Talk about when things happen.",
             &["Tag", "Jahr", "Nacht", "Stunde", "Zeit", "Woche", "heute", "morgen", "jetzt", "gestern"]),
+    ]
+}
+
+// --- pronunciation guides (static reference, no learner state) -----------
+
+/// The pronunciation primer for a language, or `None` if we don't have one.
+pub fn pronunciation_guide(language: &LanguageCode) -> Option<PronunciationGuide> {
+    let entries = match language.as_str() {
+        "de" => german_sounds(),
+        "es" => spanish_sounds(),
+        "fr" => french_sounds(),
+        _ => return None,
+    };
+    let intro = match language.as_str() {
+        "de" => "German spelling is very regular — once you know the rules, you can pronounce almost any word on sight. Here are the letters and sounds that differ most from English.",
+        "es" => "Spanish is almost perfectly phonetic: letters nearly always make the same sound, and once you learn a handful of rules you can read anything aloud.",
+        "fr" => "French spelling looks intimidating but follows consistent rules — and crucially, many final letters are silent. Here's what trips up English speakers most.",
+        _ => "",
+    };
+    Some(PronunciationGuide {
+        language: language.clone(),
+        intro: intro.into(),
+        entries,
+    })
+}
+
+fn sound(category: &str, symbol: &str, how: &str, example: &str, gloss: &str) -> SoundEntry {
+    SoundEntry {
+        category: category.into(),
+        symbol: symbol.into(),
+        sound: how.into(),
+        example: example.into(),
+        example_gloss: gloss.into(),
+    }
+}
+
+fn german_sounds() -> Vec<SoundEntry> {
+    let s = sound;
+    vec![
+        s("Vowels with umlauts", "ä", "like 'e' in 'bed'", "Mädchen", "girl"),
+        s("Vowels with umlauts", "ö", "like 'i' in 'bird', with rounded lips", "schön", "beautiful"),
+        s("Vowels with umlauts", "ü", "say 'ee' while rounding your lips", "über", "over"),
+        s("Special letters", "ß", "a sharp 's' (the same as 'ss')", "Straße", "street"),
+        s("Consonants", "w", "like English 'v'", "Wasser", "water"),
+        s("Consonants", "v", "usually like English 'f'", "Vater", "father"),
+        s("Consonants", "z", "like 'ts' in 'cats'", "Zeit", "time"),
+        s("Consonants", "j", "like English 'y'", "ja", "yes"),
+        s("Consonants", "s", "before a vowel, like English 'z'", "Sonne", "sun"),
+        s("Consonants", "r", "from the throat, like a soft gargle", "rot", "red"),
+        s("Consonants", "ch", "after a/o/u, a raspy throat sound (Scottish 'loch')", "Buch", "book"),
+        s("Consonants", "sch", "like English 'sh'", "Schule", "school"),
+        s("Vowel pairs", "ei", "like English 'eye'", "eins", "one"),
+        s("Vowel pairs", "ie", "like English 'ee'", "Liebe", "love"),
+        s("Vowel pairs", "eu", "like 'oy' in 'boy'", "neun", "nine"),
+    ]
+}
+
+fn spanish_sounds() -> Vec<SoundEntry> {
+    let s = sound;
+    vec![
+        s("Special letters", "ñ", "like 'ny' in 'canyon'", "niño", "child"),
+        s("Special letters", "ll", "like English 'y'", "llave", "key"),
+        s("Special letters", "rr", "a strongly rolled 'r'", "perro", "dog"),
+        s("Consonants", "j", "a raspy 'h' from the throat", "jardín", "garden"),
+        s("Consonants", "g", "before e/i, the same raspy 'h' as j", "gente", "people"),
+        s("Consonants", "h", "always silent", "hola", "hello"),
+        s("Consonants", "v", "sounds like 'b'", "vino", "wine"),
+        s("Consonants", "c", "before e/i, like 's' (or 'th' in Spain)", "ciudad", "city"),
+        s("Consonants", "z", "like 's' (or 'th' in Spain)", "azul", "blue"),
+        s("Consonants", "qu", "like 'k' — the u is silent", "queso", "cheese"),
+        s("Vowels", "a e i o u", "always pure and short: ah, eh, ee, oh, oo", "casa", "house"),
+        s("Stress", "´", "the accent mark shows the stressed syllable", "café", "coffee"),
+    ]
+}
+
+fn french_sounds() -> Vec<SoundEntry> {
+    let s = sound;
+    vec![
+        s("Spelling rules", "final consonants", "most final consonants are silent", "petit", "small"),
+        s("Spelling rules", "liaison", "a silent final consonant links onto a following vowel", "les amis", "the friends"),
+        s("Accented vowels", "é", "like 'ay' (closed e)", "café", "coffee"),
+        s("Accented vowels", "è / ê", "like 'e' in 'bed' (open e)", "père", "father"),
+        s("Special letters", "ç", "a soft 's'", "français", "French"),
+        s("Vowels", "u", "say 'ee' with rounded lips (like German ü)", "tu", "you"),
+        s("Vowels", "ou", "like English 'oo'", "nous", "we"),
+        s("Vowels", "eu", "like the vowel in 'her'", "deux", "two"),
+        s("Vowels", "nasal (an/en/on/in)", "the vowel passes through the nose, with no real 'n'", "pain", "bread"),
+        s("Consonants", "r", "from the back of the throat", "rouge", "red"),
+        s("Consonants", "gn", "like 'ny' in 'canyon'", "montagne", "mountain"),
+        s("Consonants", "ch", "like English 'sh'", "chat", "cat"),
+        s("Consonants", "h", "always silent", "homme", "man"),
     ]
 }
 

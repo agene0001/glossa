@@ -81,6 +81,9 @@ export const api = {
 	/** Languages that have seeded content: [{ code, name }]. */
 	availableLanguages: () => invoke('available_languages'),
 
+	/** The pronunciation primer for the current language (or null). */
+	pronunciationGuide: () => invoke('pronunciation_guide'),
+
 	/** Switch the active target language (e.g. "fr"). */
 	setTargetLanguage: (code) => invoke('set_target_language', { code }),
 
