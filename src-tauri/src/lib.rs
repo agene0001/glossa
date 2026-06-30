@@ -207,7 +207,7 @@ async fn pack_quiz(
     state: State<'_, AppState>,
     pack_id: i64,
     limit: Option<usize>,
-) -> Result<Vec<service::ReviewItem>, String> {
+) -> Result<Vec<service::Exercise>, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
     service::pack_quiz(store.as_ref(), &cfg, learner, pack_id, limit.unwrap_or(12))
         .await
@@ -283,7 +283,7 @@ async fn deck_quiz(
     state: State<'_, AppState>,
     deck_id: i64,
     limit: Option<usize>,
-) -> Result<Vec<service::ReviewItem>, String> {
+) -> Result<Vec<service::Exercise>, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
     service::deck_quiz(store.as_ref(), &cfg, learner, deck_id, limit.unwrap_or(12))
         .await
@@ -294,7 +294,7 @@ async fn deck_quiz(
 async fn review_session(
     state: State<'_, AppState>,
     limit: Option<usize>,
-) -> Result<Vec<service::ReviewItem>, String> {
+) -> Result<Vec<service::Exercise>, String> {
     let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
     service::review_session(store.as_ref(), &cfg, learner, limit.unwrap_or(12))
         .await
