@@ -12,6 +12,6 @@
     "frontend:build": "npm --prefix frontend run build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.2.0"
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

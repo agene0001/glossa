@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api.js';
+	import { speak } from '$lib/audio.js';
 	import Exercise from '$lib/Exercise.svelte';
 
 	let { patternId, lang = 'es', onBack } = $props();
