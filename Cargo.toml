@@ -31,7 +31,7 @@ glossa-service = { path = "crates/glossa-service" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = { version = "1.23.4", features = ["v4", "serde"] }
+uuid = { version = "1.24.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0.18"
 anyhow = "1.0.102"

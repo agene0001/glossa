@@ -34,6 +34,9 @@ export const api = {
 	completeUnitLesson: (unitId, understood) =>
 		invoke('complete_unit_lesson', { unitId, understood }),
 
+	/** A quiz over a unit's words — the in-lesson practice step. */
+	unitQuiz: (unitId, limit) => invoke('unit_quiz', { unitId, limit }),
+
 	/** Extra AI practice scoped to a unit's vocabulary. */
 	nextContentForUnit: (unitId) => invoke('next_content_for_unit', { unitId }),
 

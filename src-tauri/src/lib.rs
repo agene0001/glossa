@@ -371,6 +371,18 @@ async fn record_grammar_exercise(
 }
 
 #[tauri::command]
+async fn unit_quiz(
+    state: State<'_, AppState>,
+    unit_id: i64,
+    limit: Option<usize>,
+) -> Result<Vec<service::Exercise>, String> {
+    let (store, cfg, learner) = (state.store.clone(), state.cfg.clone(), state.learner_id);
+    service::unit_quiz(store.as_ref(), &cfg, learner, unit_id, limit.unwrap_or(8))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn review_session(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -464,6 +476,7 @@ pub fn run() {
             unit_lesson,
             complete_unit_lesson,
             next_content_for_unit,
+            unit_quiz,
             vocab_packs,
             pack_lesson,
             pack_quiz,

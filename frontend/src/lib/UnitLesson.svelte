@@ -3,6 +3,7 @@
 	import { api } from '$lib/api.js';
 	import { speak } from '$lib/audio.js';
 	import { posLabel } from '$lib/pos.js';
+	import Exercise from '$lib/Exercise.svelte';
 
 	let { unitId, live = false, lang = 'es', onBack } = $props();
 
@@ -32,12 +33,55 @@
 		if (!lesson) return [];
 		const s = ['objective', 'teach', 'examples'];
 		if (lesson.reading) s.push('read');
-		if (live) s.push('practice');
+		s.push('practice');
 		s.push('check');
 		return s;
 	});
 	let current = $derived(steps[step] ?? null);
 	let isLast = $derived(step >= steps.length - 1);
+
+	// Practice quiz over the unit's words (offline, multi-modal).
+	let quizItems = $state([]);
+	let quizLoading = $state(false);
+	let quizLoaded = $state(false);
+	let qIdx = $state(0);
+	let qAnswered = $state(false);
+	let qCorrect = $state(0);
+	let qCurrent = $derived(qIdx < quizItems.length ? quizItems[qIdx] : null);
+	let quizDone = $derived(quizLoaded && quizItems.length > 0 && qIdx >= quizItems.length);
+
+	// Load the practice quiz the first time the learner reaches that step.
+	$effect(() => {
+		if (current === 'practice' && !quizLoaded && !quizLoading) loadQuiz();
+	});
+
+	async function loadQuiz() {
+		quizLoading = true;
+		qIdx = 0;
+		qAnswered = false;
+		qCorrect = 0;
+		try {
+			quizItems = await api.unitQuiz(unitId);
+			quizLoaded = true;
+		} catch (e) {
+			error = String(e);
+		} finally {
+			quizLoading = false;
+		}
+	}
+	async function onQuizAnswer(correct) {
+		qAnswered = true;
+		if (correct) qCorrect += 1;
+		try {
+			await api.recordExercise(qCurrent.lexeme_id, correct);
+		} catch (e) {
+			error = String(e);
+		}
+	}
+	function qNext() {
+		qAnswered = false;
+		qIdx += 1;
+	}
 
 	async function load() {
 		loading = true;
@@ -291,32 +335,61 @@
 			</div>
 		{/if}
 
-		<!-- 5. Practice (live only) -->
+		<!-- 5. Practice — quiz on the unit's words -->
 		{#if current === 'practice'}
 			<div class="card">
-				<div class="step-kicker">Practice</div>
-				{#if !practice}
-					<p class="muted">A fresh sentence built from this unit's words, at your level.</p>
-					<button class="primary" onclick={getPractice} disabled={practiceLoading}>
-						{practiceLoading ? 'Generating…' : 'Generate a practice sentence'}
-					</button>
-				{:else}
-					<div class="story">{@render tline(practice.tokens)}</div>
-					<div class="ex-actions">
-						<button class="iconbtn" title="Listen" onclick={() => speak(plain(practice.tokens), lang)}>🔊</button>
-						{#if practice.translation}
-							<button class="link" onclick={() => (practiceRevealed = !practiceRevealed)}>
-								{practiceRevealed ? 'Hide' : 'Reveal'} translation
+				<div class="step-kicker">Practice what you learned</div>
+				{#if quizLoading}
+					<p class="muted">Building your practice…</p>
+				{:else if quizDone}
+					<div class="quiz-result">
+						<div class="emoji">{qCorrect === quizItems.length ? '🏆' : '✅'}</div>
+						<p>You got <strong>{qCorrect}</strong> of <strong>{quizItems.length}</strong> right.</p>
+						<button onclick={loadQuiz}>Practice again</button>
+					</div>
+				{:else if qCurrent}
+					<div class="quiz-progress">Question {qIdx + 1} of {quizItems.length}</div>
+					{#key qIdx}
+						<Exercise item={qCurrent} {lang} onAnswer={onQuizAnswer} />
+					{/key}
+					{#if qAnswered}
+						<div class="row" style="justify-content: flex-end; margin-top: 1.2rem;">
+							<button class="primary" onclick={qNext}>
+								{qIdx + 1 < quizItems.length ? 'Next →' : 'Finish'}
 							</button>
-						{/if}
-					</div>
-					{#if practiceRevealed && practice.translation}<div class="ex-tr">{practice.translation}</div>{/if}
-					{@render meaning()}
-					<div class="row" style="margin-top: 1rem;">
-						<button onclick={getPractice} disabled={practiceLoading}>Another</button>
-					</div>
+						</div>
+					{/if}
+				{:else}
+					<p class="muted">No words to practice here yet.</p>
 				{/if}
 			</div>
+
+			{#if live}
+				<div class="card" style="margin-top: 1.2rem;">
+					<div class="step-kicker">Extra: AI practice sentence</div>
+					{#if !practice}
+						<p class="muted">A fresh sentence built from this unit's words, at your level.</p>
+						<button onclick={getPractice} disabled={practiceLoading}>
+							{practiceLoading ? 'Generating…' : 'Generate a sentence'}
+						</button>
+					{:else}
+						<div class="story">{@render tline(practice.tokens)}</div>
+						<div class="ex-actions">
+							<button class="iconbtn" title="Listen" onclick={() => speak(plain(practice.tokens), lang)}>🔊</button>
+							{#if practice.translation}
+								<button class="link" onclick={() => (practiceRevealed = !practiceRevealed)}>
+									{practiceRevealed ? 'Hide' : 'Reveal'} translation
+								</button>
+							{/if}
+						</div>
+						{#if practiceRevealed && practice.translation}<div class="ex-tr">{practice.translation}</div>{/if}
+						{@render meaning()}
+						<div class="row" style="margin-top: 1rem;">
+							<button onclick={getPractice} disabled={practiceLoading}>Another</button>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		{/if}
 
 		<!-- 6. Check / finish -->
@@ -530,5 +603,19 @@
 	.nav-count {
 		font-size: 0.8rem;
 		color: var(--muted);
+	}
+	.quiz-progress {
+		font-size: 0.78rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--muted);
+		margin-bottom: 0.4rem;
+	}
+	.quiz-result {
+		text-align: center;
+		padding: 0.6rem 0;
+	}
+	.quiz-result .emoji {
+		font-size: 2.4rem;
 	}
 </style>

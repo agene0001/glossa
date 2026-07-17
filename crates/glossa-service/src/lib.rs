@@ -1062,6 +1062,62 @@ pub async fn pack_quiz(
         .collect())
 }
 
+/// A quiz over a unit's target words — the "practice what you just learned"
+/// step inside a lesson. Like [`pack_quiz`] but scoped to the unit's vocabulary,
+/// weakest/unseen first, and recorded through the same [`record_exercise`].
+pub async fn unit_quiz(
+    store: &dyn Store,
+    cfg: &GraphConfig,
+    learner_id: LearnerId,
+    unit_id: i64,
+    limit: usize,
+) -> Result<Vec<Exercise>> {
+    let profile = store
+        .get_learner(learner_id)
+        .await?
+        .ok_or_else(|| ServiceError::NotFound(format!("learner {learner_id}")))?;
+    let language = profile.target_language;
+
+    let unit = store
+        .units(&language)
+        .await?
+        .into_iter()
+        .find(|u| u.id.0 == unit_id)
+        .ok_or_else(|| ServiceError::NotFound(format!("unit {unit_id}")))?;
+
+    let lexemes = store.lexemes(&language).await?;
+    let states = store.lexeme_states(learner_id).await?;
+    let now = Utc::now();
+    let lex_by_id: HashMap<LexemeId, &Lexeme> = lexemes.iter().map(|l| (l.id, l)).collect();
+    let confidence_of = |id: LexemeId| -> f32 {
+        states
+            .iter()
+            .find(|s| s.lexeme_id == id)
+            .map(|s| effective_mastery(s.mastery, s.last_seen_at, now, &cfg.mastery).confidence())
+            .unwrap_or(0.0)
+    };
+
+    let mut candidates: Vec<&Lexeme> = unit
+        .target_lexemes
+        .iter()
+        .filter_map(|id| lex_by_id.get(id).copied())
+        .filter(|l| l.gloss.is_some())
+        .collect();
+    candidates.sort_by(|a, b| {
+        confidence_of(a.id)
+            .partial_cmp(&confidence_of(b.id))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(limit);
+
+    let glossed: Vec<&Lexeme> = lexemes.iter().filter(|l| l.gloss.is_some()).collect();
+    let mut rng = rand::rng();
+    Ok(candidates
+        .into_iter()
+        .map(|lex| build_exercise(lex, pick_kind(confidence_of(lex.id), &mut rng), &glossed, &mut rng))
+        .collect())
+}
+
 // --- user-authored decks (custom flashcards) -----------------------------
 
 /// First id handed to a user-created deck — a reserved range above any seeded id.
@@ -2302,6 +2358,10 @@ mod tests {
         let reading = lesson.reading.expect("authored reading passage");
         assert!(!reading.tokens.is_empty());
         assert_eq!(reading.title, "El pan");
+
+        // The in-lesson practice quiz covers the unit's (glossed) words.
+        let quiz = unit_quiz(&store, &cfg, learner.id, 1, 10).await.unwrap();
+        assert_eq!(quiz.len(), 3);
 
         // Studying the unit advances its words → unit becomes done.
         for _ in 0..6 {
