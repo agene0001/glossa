@@ -1495,6 +1495,14 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
         pack(8, "🔧", "More Common Verbs", "High-frequency verbs beyond the basics.",
             &["werden", "müssen", "sollen", "dürfen", "mögen", "sagen", "wissen", "geben",
               "nehmen", "finden", "denken", "glauben", "bleiben", "heißen", "leben", "spielen", "tun"]),
+        pack(9, "🐾", "Animals", "Common animals.",
+            &["Hund", "Katze", "Vogel", "Fisch", "Pferd", "Kuh", "Maus", "Tier"]),
+        pack(10, "🧍", "The Body", "Parts of the body.",
+            &["Kopf", "Hand", "Auge", "Ohr", "Nase", "Mund", "Fuß", "Bein", "Arm", "Herz", "Haar", "Gesicht"]),
+        pack(11, "🌳", "Nature & Weather", "The natural world.",
+            &["Baum", "Blume", "Sonne", "Mond", "Regen", "Berg", "Meer", "Fluss", "Himmel", "Wald", "Wetter", "Feuer"]),
+        pack(12, "🏙️", "Places in Town", "Places you go around town.",
+            &["Stadt", "Straße", "Garten", "Park", "Geschäft", "Restaurant", "Krankenhaus", "Bahnhof", "Kirche", "Wohnung", "Schule"]),
     ]
 }
 
