@@ -819,6 +819,23 @@ fn french_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
             &["bon", "grand", "petit", "nouveau", "heureux", "rouge"]),
         pack(6, "🏙️", "Places & Time", "Places and when things happen.",
             &["ville", "rue", "jour", "nuit", "an", "temps", "monde"]),
+        pack(7, "🔢", "Numbers", "Count from one to ten.",
+            &["un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix"]),
+        pack(8, "🎨", "Colors", "Name colors.",
+            &["rouge", "bleu", "vert", "noir", "blanc", "jaune", "gris"]),
+        pack(9, "🧍", "The Body", "Parts of the body.",
+            &["tête", "main", "œil", "bouche", "nez", "pied", "bras", "jambe", "cœur"]),
+        pack(10, "🍽️", "More Food & Drink", "More to eat and drink.",
+            &["viande", "fromage", "œuf", "fruit", "légume", "poisson", "riz", "soupe", "vin", "bière", "thé"]),
+        pack(11, "🐾", "Animals & Nature", "Animals and the natural world.",
+            &["oiseau", "cheval", "vache", "arbre", "fleur", "soleil", "lune", "ciel", "mer", "montagne", "forêt"]),
+        pack(12, "🚆", "Getting Around", "Places and transport.",
+            &["école", "magasin", "restaurant", "hôpital", "gare", "église", "parc", "jardin", "voiture", "train"]),
+        pack(13, "🏠", "Home & Clothes", "Around the house, and what you wear.",
+            &["lit", "chaise", "fenêtre", "cuisine", "chambre", "clé", "chemise", "chaussure", "robe", "chapeau"]),
+        pack(14, "🔧", "More Common Verbs", "High-frequency verbs.",
+            &["prendre", "devoir", "croire", "penser", "mettre", "trouver", "donner", "demander",
+              "attendre", "comprendre", "connaître", "regarder", "écouter", "chercher", "aider"]),
     ]
 }
 
