@@ -114,7 +114,13 @@ export const api = {
 	reviewableCount: () => invoke('reviewable_count'),
 
 	/** Read-only progress snapshot for the Stats dashboard. */
-	stats: () => invoke('learner_stats')
+	stats: () => invoke('learner_stats'),
+
+	/** Curated free external resources for the current language. */
+	externalResources: () => invoke('external_resources'),
+
+	/** Open a URL in the system browser. */
+	openExternal: (url) => invoke('open_external', { url })
 };
 
 /** True when running inside the Tauri webview (vs. a plain browser tab). */

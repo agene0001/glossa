@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use glossa_core::{
-    ExampleSentence, GrammarDrill, GrammarPattern, LanguageCode, Lexeme, LexemeId, PackId,
-    PartOfSpeech, PatternId, PronunciationGuide, ReadingPassage, SoundEntry, Unit, UnitId,
-    VocabPack,
+    ExampleSentence, ExternalResource, GrammarDrill, GrammarPattern, LanguageCode, Lexeme, LexemeId,
+    PackId, PartOfSpeech, PatternId, PronunciationGuide, ReadingPassage, ResourceGuide, SoundEntry,
+    Unit, UnitId, VocabPack,
 };
 use glossa_storage::{StorageError, Store};
 
@@ -1656,6 +1656,73 @@ fn russian_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexem
             &["хороший", "плохой", "большой", "маленький", "новый", "старый", "красивый",
               "красный", "синий", "зелёный", "чёрный", "белый"]),
     ]
+}
+
+// --- curated external resources (immersion, static reference) ------------
+
+fn res(category: &str, title: &str, description: &str, url: &str, tag: &str) -> ExternalResource {
+    ExternalResource {
+        category: category.into(),
+        title: title.into(),
+        description: description.into(),
+        url: url.into(),
+        tag: tag.into(),
+    }
+}
+
+/// Hand-curated free resources for a language — the immersion the app can't
+/// replicate (comprehensible-input video, native audio, exchange, tools).
+pub fn external_resources(language: &LanguageCode) -> Option<ResourceGuide> {
+    let mut resources = match language.as_str() {
+        "es" => vec![
+            res("Watch", "Dreaming Spanish", "The gold-standard comprehensible-input channel — hours of understandable Spanish, from superbeginner up.", "https://www.youtube.com/@DreamingSpanish", "comprehensible input"),
+            res("Watch", "Easy Spanish", "Unscripted street interviews with dual subtitles — real, natural speech.", "https://www.youtube.com/@EasySpanish", "free"),
+            res("Watch", "Spanish with Juan (1001 Reasons)", "Slow, story-driven Spanish told entirely in Spanish.", "https://www.youtube.com/results?search_query=espa%C3%B1ol+con+juan", "free"),
+            res("Listen", "Coffee Break Spanish", "Structured audio lessons that build from zero — great for commutes.", "https://coffeebreaklanguages.com/coffeebreakspanish/", "free"),
+            res("Listen", "Duolingo Spanish Podcast", "Real stories in easy Spanish with English narration to keep you oriented.", "https://podcast.duolingo.com/spanish", "free"),
+            res("Listen", "News in Slow Spanish", "Current events spoken slowly and clearly.", "https://www.newsinslowspanish.com/", "freemium"),
+        ],
+        "fr" => vec![
+            res("Watch", "Easy French", "Street interviews with dual subtitles — how French is actually spoken.", "https://www.youtube.com/@EasyFrench", "free"),
+            res("Watch", "InnerFrench", "Intermediate French explained in slow, clear French about interesting topics.", "https://www.youtube.com/@innerFrench", "comprehensible input"),
+            res("Watch", "Français Authentique", "Natural French with a focus on understanding, not rules.", "https://www.youtube.com/@francaisauthentique", "free"),
+            res("Listen", "Coffee Break French", "Build French step by step through audio lessons.", "https://coffeebreaklanguages.com/coffeebreakfrench/", "free"),
+            res("Listen", "InnerFrench Podcast", "The InnerFrench approach in podcast form — slow, engaging French.", "https://innerfrench.com/podcast/", "free"),
+            res("Listen", "News in Slow French", "The news, spoken slowly and explained.", "https://www.newsinslowfrench.com/", "freemium"),
+        ],
+        "de" => vec![
+            res("Watch", "Easy German", "Excellent unscripted street interviews with dual subtitles.", "https://www.youtube.com/@EasyGerman", "comprehensible input"),
+            res("Watch", "Deutsch mit Marija", "Clear, structured German lessons across levels.", "https://www.youtube.com/@deutschmitmarija", "free"),
+            res("Watch", "Learn German with Anja", "Fun, energetic lessons — good for beginners.", "https://www.youtube.com/@LearnGermanwithAnja", "free"),
+            res("Listen", "DW – Learn German", "Deutsche Welle's free courses + 'langsam gesprochene Nachrichten' (slow news).", "https://learngerman.dw.com/", "free"),
+            res("Listen", "Slow German (Annik Rubens)", "Short episodes about German life, spoken slowly.", "https://slowgerman.com/", "free"),
+            res("Read", "Nachrichtenleicht", "Weekly news in simple German (with audio) — made for learners.", "https://www.nachrichtenleicht.de/", "easy news"),
+        ],
+        "ru" => vec![
+            res("Watch", "Russian with Max", "Superb comprehensible-input Russian — slow, clear, all in Russian.", "https://www.youtube.com/@russianwithmax", "comprehensible input"),
+            res("Watch", "Easy Russian", "Street interviews with dual subtitles — real spoken Russian.", "https://www.youtube.com/@EasyRussian", "free"),
+            res("Watch", "Russian Progress", "Comprehensible input and immersion-style content.", "https://www.youtube.com/@RussianProgress", "comprehensible input"),
+            res("Listen", "Slow Russian / RealLife podcasts", "Search out slow, learner-aimed Russian audio to train your ear.", "https://www.youtube.com/results?search_query=slow+russian+podcast", "free"),
+            res("Read", "Wikipedia (Простой)", "Read short articles in Russian and tap unknown words into a deck.", "https://ru.wikipedia.org/", "free"),
+        ],
+        _ => return None,
+    };
+
+    // Universal tools + speaking/exchange (added to every language).
+    resources.extend([
+        res("Read", "LingQ", "Extensive reading with tap-to-look-up and imported content — build vocabulary from real texts.", "https://www.lingq.com/", "freemium"),
+        res("Read", "Language Reactor", "Dual subtitles + click-to-translate on Netflix and YouTube.", "https://www.languagereactor.com/", "free tier"),
+        res("Speak & exchange", "Tandem", "Text/voice with native speakers who want to learn your language.", "https://www.tandem.net/", "exchange"),
+        res("Speak & exchange", "HelloTalk", "Chat with native speakers, with built-in correction tools.", "https://www.hellotalk.com/", "exchange"),
+        res("Speak & exchange", "italki", "Book affordable lessons with tutors — the single best thing for speaking.", "https://www.italki.com/", "tutors"),
+        res("Tools", "Anki", "The gold-standard spaced-repetition flashcards (uses FSRS).", "https://apps.ankiweb.net/", "free / SRS"),
+        res("Tools", "Forvo", "Hear any word pronounced by native speakers.", "https://forvo.com/", "free"),
+    ]);
+
+    Some(ResourceGuide {
+        language: language.clone(),
+        resources,
+    })
 }
 
 // --- pronunciation guides (static reference, no learner state) -----------

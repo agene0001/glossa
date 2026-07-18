@@ -18,6 +18,7 @@ mod lexeme;
 mod mastery;
 mod pack;
 mod pronunciation;
+mod resources;
 mod unit;
 
 pub use content::{
@@ -32,6 +33,7 @@ pub use lexeme::{GrammarDrill, GrammarPattern, Lexeme};
 pub use mastery::{GrammarState, LexemeState, MasteryState};
 pub use pack::VocabPack;
 pub use pronunciation::{PronunciationGuide, SoundEntry};
+pub use resources::{ExternalResource, ResourceGuide};
 pub use unit::{ExampleSentence, ReadingPassage, Unit};
 
 /// Crate-wide error type. Kept intentionally small; domain logic rarely fails,

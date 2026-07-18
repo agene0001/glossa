@@ -24,6 +24,7 @@
 		{ href: '/', label: 'Learn' },
 		{ href: '/vocab', label: 'Vocab' },
 		{ href: '/grammar', label: 'Grammar' },
+		{ href: '/immerse', label: 'Immerse' },
 		{ href: '/sounds', label: 'Sounds' },
 		{ href: '/quiz', label: 'Quiz' },
 		{ href: '/review', label: 'Review' },

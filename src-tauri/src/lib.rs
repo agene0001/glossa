@@ -18,6 +18,7 @@ use glossa_content::{
 };
 use glossa_core::{
     ContentResponse, LanguageCode, LearnerId, LexemeId, MasteryState, PronunciationGuide,
+    ResourceGuide,
 };
 use glossa_graph::{GraphConfig, GraphOverview};
 use glossa_service as service;
@@ -68,6 +69,26 @@ async fn backend_status(state: State<'_, AppState>) -> Result<BackendStatus, Str
         streak,
         learner_id: learner.to_string(),
     })
+}
+
+/// Curated free external resources for the learner's current language.
+#[tauri::command]
+async fn external_resources(
+    state: State<'_, AppState>,
+) -> Result<Option<ResourceGuide>, String> {
+    let (store, learner) = (state.store.clone(), state.learner_id);
+    let profile = store
+        .get_learner(learner)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "learner not found".to_string())?;
+    Ok(seed::external_resources(&profile.target_language))
+}
+
+/// Open a URL in the system's default browser.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    open::that(url).map_err(|e| e.to_string())
 }
 
 /// The pronunciation primer for the learner's current language (or null).
@@ -492,6 +513,8 @@ pub fn run() {
             grammar_lesson,
             record_grammar_exercise,
             pronunciation_guide,
+            external_resources,
+            open_external,
             available_languages,
             set_target_language,
             review_session,
