@@ -542,6 +542,18 @@ fn spanish_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexem
               "recibir", "preguntar", "pagar", "viajar", "vender"]),
         pack(9, "👨‍👩‍👧", "People & Family", "The people in your life.",
             &["hombre", "mujer", "niño", "niña", "amigo", "amiga", "gente", "familia", "padre", "madre"]),
+        pack(10, "👪", "Extended Family", "More family members.",
+            &["padre", "madre", "hijo", "hija", "hermano", "hermana", "abuelo", "abuela", "tío", "tía"]),
+        pack(11, "🐾", "Animals", "Common animals.",
+            &["perro", "gato", "pájaro", "caballo", "vaca", "animal"]),
+        pack(12, "🌳", "Nature", "The natural world.",
+            &["árbol", "flor", "sol", "luna", "cielo", "mar", "río", "montaña", "tierra", "fuego", "piedra"]),
+        pack(13, "🚆", "Getting Around", "Transport and places.",
+            &["coche", "tren", "barco", "avión", "puente", "iglesia", "oficina", "universidad", "lugar"]),
+        pack(14, "🏠", "Home & Kitchen", "Around the house.",
+            &["cama", "silla", "ventana", "cocina", "habitación", "lámpara", "llave", "mesa", "puerta"]),
+        pack(15, "🌍", "Ideas & Society", "More abstract vocabulary.",
+            &["verdad", "idea", "razón", "historia", "guerra", "paz", "muerte", "vida", "forma", "manera", "persona"]),
     ]
 }
 
