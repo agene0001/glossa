@@ -1489,6 +1489,12 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
               "rot", "blau", "grün", "schwarz", "weiß", "gelb"]),
         pack(6, "⏰", "Time & Days", "Talk about when things happen.",
             &["Tag", "Jahr", "Nacht", "Stunde", "Zeit", "Woche", "heute", "morgen", "jetzt", "gestern"]),
+        pack(7, "❓", "Question & Function Words", "The little words that hold sentences together.",
+            &["was", "wer", "wie", "wo", "wann", "warum", "weil", "wenn", "dass", "aber", "oder",
+              "viel", "mehr", "schon", "noch", "nur", "immer", "nie", "oft", "vielleicht"]),
+        pack(8, "🔧", "More Common Verbs", "High-frequency verbs beyond the basics.",
+            &["werden", "müssen", "sollen", "dürfen", "mögen", "sagen", "wissen", "geben",
+              "nehmen", "finden", "denken", "glauben", "bleiben", "heißen", "leben", "spielen", "tun"]),
     ]
 }
 
