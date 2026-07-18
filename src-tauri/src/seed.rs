@@ -1651,6 +1651,14 @@ fn german_packs(language: &LanguageCode, base: i64, ids: &HashMap<String, Lexeme
         pack(14, "🌍", "Society & Ideas", "More abstract vocabulary for real topics.",
             &["Gesellschaft", "Regierung", "Krieg", "Frieden", "Zukunft", "Geschichte", "Sprache", "Erfahrung",
               "Möglichkeit", "erklären", "entscheiden", "versuchen", "bedeuten", "verbessern"]),
+        pack(15, "👪", "Extended Family", "More family members.",
+            &["Vater", "Mutter", "Bruder", "Schwester", "Sohn", "Tochter", "Oma", "Opa", "Onkel", "Tante", "Baby"]),
+        pack(16, "👕", "Clothes", "What you wear.",
+            &["Hemd", "Hose", "Schuh", "Jacke", "Mantel", "Kleid", "Hut"]),
+        pack(17, "🚆", "Getting Around", "Transport and travel.",
+            &["Auto", "Zug", "Bus", "Flugzeug", "Fahrrad", "Schiff", "Boot", "Reise", "Bahnhof", "Flughafen"]),
+        pack(18, "🍳", "In the Kitchen", "Food and things on the table.",
+            &["Teller", "Glas", "Flasche", "Löffel", "Gabel", "Messer", "Reis", "Salat", "Wurst", "Butter", "Kuchen"]),
     ]
 }
 
